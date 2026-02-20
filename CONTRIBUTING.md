@@ -123,7 +123,7 @@ Before you begin, ensure you have the following installed:
 
 ### Step 1: Fork the Repository
 
-Navigate to [https://github.com/charmi2208/Symboisis](https://github.com/charmi2208/Symboisis)  
+Navigate to [https://github.com/gdg-charusat/FMEA_SupplyChain](https://github.com/gdg-charusat/FMEA_SupplyChain)  
 Click the **Fork** button in the top-right corner.  
 This creates a copy of the repository in your GitHub account.
 
@@ -131,8 +131,8 @@ This creates a copy of the repository in your GitHub account.
 
 Clone the forked repository to your local machine:
 ```bash
-git clone https://github.com/YOUR-USERNAME/Symboisis.git
-cd Symboisis
+git clone https://github.com/YOUR-USERNAME/FMEA_SupplyChain.git
+cd FMEA_SupplyChain
 ```
 
 Replace `YOUR-USERNAME` with your GitHub username.
@@ -141,7 +141,7 @@ Replace `YOUR-USERNAME` with your GitHub username.
 
 Add the original repository as an upstream remote to keep your fork synced:
 ```bash
-git remote add upstream https://github.com/charmi2208/Symboisis.git
+git remote add upstream https://github.com/gdg-charusat/FMEA_SupplyChain.git
 ```
 
 Verify the remotes:
@@ -151,8 +151,8 @@ git remote -v
 
 You should see:
 
-- `origin` - your fork ([https://github.com/YOUR-USERNAME/Symboisis.git](https://github.com/YOUR-USERNAME/Symboisis.git))
-- `upstream` - the original repository ([https://github.com/charmi2208/Symboisis.git](https://github.com/charmi2208/Symboisis.git))
+- `origin` - your fork ([https://github.com/YOUR-USERNAME/FMEA_SupplyChain.git](https://github.com/YOUR-USERNAME/FMEA_SupplyChain.git))
+- `upstream` - the original repository ([https://github.com/gdg-charusat/FMEA_SupplyChain.git](https://github.com/gdg-charusat/FMEA_SupplyChain.git))
 
 ### Step 4: Create a Virtual Environment
 
@@ -231,7 +231,7 @@ git checkout -b feature/your-feature-name
 
 ### 1. Pick an Issue
 
-Browse the Issues page at [https://github.com/charmi2208/Symboisis/issues](https://github.com/charmi2208/Symboisis/issues)
+Browse the Issues page at [https://github.com/gdg-charusat/FMEA_SupplyChain/issues](https://github.com/gdg-charusat/FMEA_SupplyChain/issues)
 
 Look for issues labelled:
 - `good first issue` or `level: beginner` — for beginners
@@ -245,14 +245,6 @@ Wait to be officially assigned — do not start writing any code until a maintai
 Do not work on an issue already assigned to someone else.
 
 ### 2. Understand the Project Structure
-
-Before writing any code, read these files in order:
-
-- `START_HERE.md` — overall orientation for new contributors
-- `QUICK_REFERENCE.md` — fast lookup for common commands and file purposes
-- `USAGE_GUIDE.md` — how the system is used end to end
-- `YOUR_DATA_GUIDE.md` — how to work with FMEA.csv and car review datasets
-- `SETUP.md` — detailed setup troubleshooting
 
 Understand which module your issue touches:
 
@@ -452,7 +444,6 @@ git push origin feature/your-feature-name
 - **Issue Discussion:** Comment on the issue you are working on
 - **WhatsApp:** +91-8320699419 || +91-8347036131 || +91-9227448882
 - **Email:** charmidodiya2005@gmail.com || jadejakrishnapal04@gmail.com || aaleya2604@gmail.com
-- **Documentation:** Read `START_HERE.md`, then `QUICK_REFERENCE.md`, then `USAGE_GUIDE.md`
 - **Troubleshooting:** Check the FAQ section in `README.md` first
 
 ---
@@ -482,4 +473,3 @@ Please be respectful and professional in all interactions. We are here to learn 
 Happy Coding! 🚀
 
 If you have any questions or need clarification, feel free to reach out to the maintainers or ask in the issue comments.
-
