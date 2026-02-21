@@ -25,6 +25,7 @@
 - [Project Structure](#project-structure)
 - [Examples](#examples)
 - [API Reference](#api-reference)
+- [FAQ](#faq)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -506,6 +507,54 @@ python cli.py --text input.csv --output result.xlsx --no-model
 | RAM | 8GB | 16GB |
 | GPU | None | 8GB VRAM |
 | Disk | 2GB | 10GB |
+
+---
+
+## ❓ FAQ
+
+### 1. "I get `ModuleNotFoundError: No module named 'nltk'` — what do I do?"
+
+Install the required dependencies and download NLTK data:
+```bash
+pip install -r requirements.txt
+python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('averaged_perceptron_tagger')"
+```
+
+### 2. "The model takes forever to load / crashes with out-of-memory error"
+
+Use the `--no-model` flag to run in rule-based mode (faster, no LLM required):
+```bash
+python cli.py --text input.csv --output result.xlsx --no-model
+```
+Alternatively, enable quantization in `config/config.yaml` by setting `quantization: true` to reduce memory usage.
+
+### 3. "I get `Error: .env file not found`"
+
+Copy the example environment file and configure it:
+```bash
+cp .env.example .env
+```
+Most fields in `.env` are optional. You only need to fill in `HUGGINGFACE_TOKEN` or `OPENAI_API_KEY` if you're using gated models or GPT-based extraction.
+
+### 4. "Streamlit opens but the dashboard is blank / shows no data"
+
+You need to provide input data. Either upload a CSV/Excel file using the dashboard interface, or click the "Use Sample Data" button to load example datasets and generate FMEA.
+
+### 5. "Can I use this without a GPU?"
+
+Yes! The system works on CPU. Use rule-based mode (`--no-model`) for fastest processing (~50 reviews/sec), or let the LLM run on CPU (~0.3 reviews/sec with lower hardware requirements). See the Performance section for detailed benchmarks.
+
+### 6. "My CSV isn't being parsed correctly — wrong columns detected"
+
+Your CSV must include the required column names: `failure_mode`, `effect`, `cause`, and `component`. Check YOUR_DATA_GUIDE.md for detailed formatting requirements and examples.
+
+### 7. "What is RPN and what do the scores mean?"
+
+RPN (Risk Priority Number) is calculated as Severity × Occurrence × Detection. It quantifies risk level: higher RPN means higher priority. Severity measures impact (1-10), Occurrence measures frequency (1-10), and Detection measures how likely the failure is to be detected before occurring (1-10).
+
+### 8. "How do I contribute? Can I pick any issue?"
+
+Check CONTRIBUTING.md for guidelines. You must comment on an issue to request assignment and wait for maintainer approval before working on it. Include your team number in your PR description. One issue per contributor at a time, and PRs for unassigned issues will be closed.
 
 ---
 
