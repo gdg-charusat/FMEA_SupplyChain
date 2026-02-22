@@ -334,12 +334,13 @@ def main():
         """)
     
     # Main content area
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📝 Generate FMEA", 
-        "🎯 PFMEA Generator", 
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📝 Generate FMEA",
+        "🎯 PFMEA Generator",
         "🚚 Supply Chain Risk",
-        "📊 Analytics", 
-        "ℹ️ Help"
+        "📊 Analytics",
+        "ℹ️ Help",
+        "🇮🇳 India City Risks"
     ])
     
     with tab1:
@@ -1319,6 +1320,65 @@ def main():
         - Export results for team reviews
         - Monitor RPN trends over time
         """)
+
+    # ------------------------------------------------------------------ #
+    # Tab 6 — India City Risks
+    # ------------------------------------------------------------------ #
+    with tab6:
+        st.header("🇮🇳 India Supply Chain Risk by City")
+
+        def color_risk_level(val):
+            """Return CSS for risk-level cell colouring."""
+            css = {
+                "High":   "background-color: #ffd6d6; color: #a94442",
+                "Medium": "background-color: #fff3cd; color: #856404",
+                "Low":    "background-color: #d4edda; color: #155724",
+            }
+            return css.get(val, "")
+
+        try:
+            from check_city_risks import CityRiskChecker
+
+            checker = CityRiskChecker("india_supply_risk.csv")
+            city_df = checker.get_city_risk_summary()
+
+            # Styled dataframe
+            if not city_df.empty:
+                styled = city_df.style.applymap(
+                    color_risk_level, subset=["risk_level"]
+                )
+                st.dataframe(styled, use_container_width=True)
+
+                # Plotly bar chart — top 10
+                top10 = city_df.head(10)
+                fig = px.bar(
+                    top10,
+                    x="city",
+                    y="avg_severity",
+                    color="risk_level",
+                    color_discrete_map={
+                        "High": "#e74c3c",
+                        "Medium": "#f39c12",
+                        "Low": "#27ae60",
+                    },
+                    title="Risk by Indian City (Top 10)",
+                )
+                fig.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Highest-risk callout
+            top_city = checker.get_highest_risk_city()
+            if top_city["city"]:
+                st.error(
+                    f"⚠️ Highest Risk: **{top_city['city']}** — "
+                    f"RPN: {top_city['rpn']}"
+                )
+            else:
+                st.warning("No Indian-city data found in the dataset.")
+
+        except Exception as exc:
+            logger.exception("India City Risks tab error")
+            st.error(f"Error loading India risk data: {exc}")
 
 
 if __name__ == "__main__":

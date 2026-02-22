@@ -1,0 +1,50 @@
+City,Component,Failure Mode,Cause,Effect,Severity,Occurrence,Detection,RPN,Cost_USD
+Mumbai,Gearbox,Oil leakage,Seal ring damage,Reduced transmission life,7,4,6,168,1200
+Mumbai,Hydraulic System,Cylinder leakage,Seal deterioration,System failure,9,3,4,108,3500
+Mumbai,Conveyor Belt,Belt misalignment,Roller wear,Production stoppage,8,5,3,120,2800
+Mumbai,Pump,Pump cavitation,Low fluid level,Reduced flow rate,6,4,5,120,900
+Delhi,Bearing,Insufficient lubrication,Blocked lubrication pipe,Bearing overheating,6,5,3,90,750
+Delhi,Electrical Panel,Short circuit,Insulation failure,Equipment shutdown,9,4,2,72,4200
+Delhi,Motor,Overheating,Cooling fan failure,Motor burnout,8,3,5,120,3100
+Delhi,Compressor,Pressure loss,Valve seat damage,Reduced air supply,7,4,4,112,1800
+Delhi,Transformer,Winding fault,Moisture ingress,Power fluctuation,8,3,6,144,5200
+Chennai,Gear,Gear wear,Insufficient lubrication,Vibration increase,5,4,4,80,600
+Chennai,Hydraulic Cylinder,Piston seal failure,High temperature operation,Slow actuator response,7,5,3,105,2200
+Chennai,PLC Controller,Software glitch,Firmware bug,Random machine stops,6,3,7,126,1500
+Chennai,Cooling Tower,Scale buildup,Hard water supply,Reduced cooling capacity,5,6,4,120,950
+Pune,Brake System,Brake pad wear,Continuous heavy usage,Reduced braking force,8,6,2,96,1100
+Pune,Robotic Arm,Joint stiffness,Grease degradation,Positioning error,7,3,5,105,3800
+Pune,Welding Gun,Electrode wear,High cycle count,Poor weld quality,6,5,4,120,700
+Bangalore,Spindle,Bearing failure,Contaminated lubricant,Spindle runout,9,3,3,81,4500
+Bangalore,Servo Drive,Overload fault,Parameter drift,Axis positioning error,7,4,4,112,2600
+Bangalore,Laser Cutter,Lens contamination,Dust ingress,Poor cut quality,6,5,3,90,1900
+Bangalore,CNC Machine,Tool breakage,Excessive feed rate,Surface finish defect,8,4,3,96,3200
+Hyderabad,Heat Exchanger,Tube fouling,Mineral deposits,Reduced heat transfer,6,5,4,120,1400
+Hyderabad,Generator,AVR failure,Voltage surge,Unstable power output,8,3,5,120,5100
+Hyderabad,Boiler,Tube leakage,Corrosion,Steam loss,9,2,4,72,6200
+Ahmedabad,Textile Loom,Shuttle malfunction,Spring fatigue,Fabric defect,5,6,3,90,800
+Ahmedabad,Dyeing Machine,Temperature drift,Sensor failure,Color inconsistency,6,4,5,120,1200
+Ahmedabad,Spinning Frame,Roller bearing seizure,Lubrication gap,Yarn breakage,7,5,3,105,950
+Kolkata,Crane,Wire rope fraying,Overloading,Load drop risk,9,3,2,54,7500
+Kolkata,Conveyor,Chain stretch,Heavy load cycles,Speed inconsistency,6,5,4,120,1100
+Kolkata,Press Machine,Ram misalignment,Foundation settling,Part dimension error,7,4,4,112,2400
+Surat,Diamond Polisher,Chuck wear,Abrasive dust,Stone damage,8,5,2,80,12000
+Surat,Textile Printer,Ink nozzle clog,Dried ink residue,Print defect,5,6,3,90,650
+Surat,Embroidery Machine,Needle breakage,Thread tension fault,Pattern defect,4,5,4,80,400
+Jaipur,Stone Cutter,Blade wear,Hard material cutting,Inaccurate cuts,6,5,4,120,950
+Jaipur,Polishing Unit,Motor overheating,Continuous operation,Surface defect,7,4,3,84,1300
+Jaipur,Kiln,Thermocouple drift,High temperature cycling,Uneven firing,8,3,5,120,2100
+Vadodara,Chemical Reactor,Agitator seal leak,Corrosive medium,Contamination risk,9,3,3,81,5500
+Vadodara,Distillation Column,Tray damage,Corrosion buildup,Separation efficiency loss,7,4,4,112,3400
+Nagpur,Mining Drill,Bit wear,Hard rock strata,Reduced penetration rate,6,6,3,108,2000
+Nagpur,Crusher,Jaw plate erosion,Abrasive material,Reduced throughput,7,5,3,105,2800
+Nagpur,Screening Machine,Mesh tear,Oversize material,Contaminated output,5,5,4,100,600
+Coimbatore,Textile Spindle,Bearing noise,Lubricant degradation,Yarn quality issues,6,5,3,90,750
+Coimbatore,Pump Motor,Winding failure,Voltage imbalance,Pump shutdown,8,3,4,96,2200
+Coimbatore,Air Compressor,Valve leak,Seat erosion,Pressure drop,5,4,5,100,800
+Indore,Packaging Machine,Seal jaw misalignment,Cam wear,Poor seal quality,6,5,4,120,1100
+Indore,Filling Machine,Nozzle drip,O-ring wear,Product waste,5,6,3,90,500
+Indore,Labelling Machine,Label skew,Sensor misread,Mislabeled product,4,4,5,80,350
+Bhopal,Gas Detector,Sensor drift,Chemical exposure,False readings,9,3,2,54,3000
+Bhopal,Safety Valve,Valve sticking,Corrosion buildup,Overpressure risk,10,2,3,60,4500
+Bhopal,Scrubber,Packing degradation,Chemical attack,Emission exceedance,8,3,4,96,2800
