@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 import yaml
 import pandas as pd
+from datetime import datetime
 
 # Add src directory to path
 sys.path.append(str(Path(__file__).parent / 'src'))
@@ -53,7 +54,7 @@ Examples:
     parser.add_argument(
         '--output', '-o',
         type=str,
-        required=True,
+        default="output/fmea_output.xlsx",
         help='Output file path for generated FMEA'
     )
     
@@ -135,16 +136,28 @@ Examples:
     
     print(f"\n✅ FMEA generated successfully with {len(fmea_df)} entries")
     
-    # Export
-    output_path = Path(args.output)
-    
-    if args.format == 'json':
-        from utils import export_to_json
-        export_to_json(fmea_df, str(output_path))
-    else:
-        generator.export_fmea(fmea_df, str(output_path), format=args.format)
-    
-    print(f"📁 FMEA exported to: {output_path}")
+# Export
+default_output = "output/fmea_output.xlsx"
+output_str = args.output
+
+# If user did NOT override default, append timestamp
+if output_str == default_output:
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    base_path = Path(default_output)
+    output_str = str(
+        base_path.parent / f"{base_path.stem}_{timestamp}{base_path.suffix}"
+    )
+
+output_path = Path(output_str)
+output_path.parent.mkdir(parents=True, exist_ok=True)
+
+if args.format == 'json':
+    from utils import export_to_json
+    export_to_json(fmea_df, str(output_path))
+else:
+    generator.export_fmea(fmea_df, str(output_path), format=args.format)
+
+print(f"📁 FMEA exported to: {output_path}")
     
     # Print summary if requested
     if args.summary:
