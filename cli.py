@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).parent / 'src'))
 
 from fmea_generator import FMEAGenerator
 from utils import setup_logging, load_config, generate_summary_report
+from preprocessing import flag_ambiguous_reviews
 
 
 def main():
@@ -132,6 +133,47 @@ Examples:
         # Structured only
         print("Mode: Structured Data")
         fmea_df = generator.generate_from_structured(args.structured)
+
+    # ------------------------------------------------------------------
+    # Sarcasm / ambiguity filter (runs only when text input was provided)
+    # ------------------------------------------------------------------
+    if args.text:
+        import csv as _csv
+        # Collect raw lines from the text file
+        text_path = Path(args.text)
+        if text_path.exists():
+            try:
+                with open(text_path, encoding='utf-8', errors='replace') as _f:
+                    raw_lines = [line.strip() for line in _f if line.strip()]
+                # Try to read as CSV; fall back to plain lines
+                try:
+                    import pandas as _pd
+                    _df_raw = _pd.read_csv(text_path, encoding='utf-8',
+                                           on_bad_lines='skip', low_memory=False)
+                    text_col = next(
+                        (c for c in _df_raw.columns
+                         if c.lower() in ('review', 'text', 'comment',
+                                          'description', 'feedback')),
+                        _df_raw.columns[0]
+                    )
+                    raw_lines = _df_raw[text_col].dropna().astype(str).tolist()
+                except Exception:
+                    pass  # use the plain-line fallback above
+
+                sarcasm_result = flag_ambiguous_reviews(raw_lines)
+                flagged = sarcasm_result["flagged"]
+                if flagged:
+                    print(f"\n⚠️  {len(flagged)} review(s) flagged as potentially "
+                          f"sarcastic — see flagged_reviews.txt")
+                    flagged_path = Path("flagged_reviews.txt")
+                    with open(flagged_path, "w", encoding="utf-8") as _out:
+                        for _rev in flagged:
+                            _out.write(_rev + "\n")
+                    print(f"   Flagged reviews written to: {flagged_path.resolve()}")
+                else:
+                    print("\n✅ No sarcastic or ambiguous reviews detected.")
+            except Exception as _err:
+                print(f"\n⚠️  Sarcasm filter skipped: {_err}")
     
     print(f"\n✅ FMEA generated successfully with {len(fmea_df)} entries")
     

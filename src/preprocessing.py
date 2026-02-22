@@ -22,7 +22,112 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Sarcasm & Contextual Slang Pre-processor
+# ---------------------------------------------------------------------------
+
+# Keywords that indicate genuine severity / safety issues
+SEVERITY_KEYWORDS: set[str] = {
+    "failed", "failure", "broke", "broken", "dangerous", "danger",
+    "seized", "recall", "caught fire", "no warning", "death", "died",
+    "crash", "crashed", "total loss", "accident", "explode", "exploded",
+    "fire", "smoke", "stall", "stalled", "malfunction", "defect",
+    # Additional safety & injury words
+    "airbag", "deploy", "deployed", "deploying",
+    "killed", "kill", "killing", "injury", "injured", "injure",
+    "wound", "wounded", "fatal", "fatality", "unsafe", "hazard",
+    "spontaneous", "rollover", "collision", "brake", "steering",
+}
+
+
+# Words that express genuine praise / satisfaction
+PRAISE_WORDS: set[str] = {
+    "great", "love", "amazing", "excellent", "perfect", "awesome",
+    "fantastic", "wonderful", "incredible", "outstanding", "superb",
+    "brilliant", "best",
+}
+
+# Short ironic phrases often used in sarcastic reviews
+IRONIC_PHRASES: set[str] = {
+    "10/10", "best ever", "love it", "highly recommend", "five stars",
+    "5 stars", "great job", "well done",
+}
+
+
+def flag_ambiguous_reviews(reviews: list[str]) -> dict:
+    """
+    Analyse a list of customer review strings and separate them into
+    reviews that are safe to pass to the LLM and reviews that show
+    signs of sarcasm or contradictory sentiment (needing human review).
+
+    Detection rules (purely rule-based, uses existing TextBlob sentiment):
+
+    1. **Positive-sentiment + severity keyword** — likely sarcasm
+       e.g. "Definitely a 10/10 adrenaline rush!" where brakes failed.
+    2. **Negative-sentiment + praise word** — contradictory / mixed context
+       e.g. "Love the car, except it nearly killed me twice."
+    3. **Ironic-praise phrase + severity keyword** — ironic praise pattern
+       e.g. "10/10 for the airbag deploying randomly."
+
+    Args:
+        reviews: List of raw review strings.
+
+    Returns:
+        dict with two keys:
+            "clean"   – List[str] of reviews safe to pass to the LLM.
+            "flagged" – List[str] of reviews needing human review.
+    """
+    clean: list[str] = []
+    flagged: list[str] = []
+
+    for review in reviews:
+        review_lower = review.lower()
+
+        # Compute TextBlob sentiment polarity (-1 … +1)
+        try:
+            sentiment_score: float = TextBlob(review).sentiment.polarity
+        except Exception:
+            sentiment_score = 0.0
+
+        # Pre-compute keyword presence (substring match, order-independent)
+        has_severity = any(kw in review_lower for kw in SEVERITY_KEYWORDS)
+        has_praise = any(kw in review_lower for kw in PRAISE_WORDS)
+        has_ironic = any(phrase in review_lower for phrase in IRONIC_PHRASES)
+
+        is_flagged = False
+
+        # Rule 1 – Positive sentiment but contains a severity keyword → likely sarcasm
+        if sentiment_score > 0.3 and has_severity:
+            is_flagged = True
+
+        # Rule 2 – Negative sentiment but contains a praise word → contradictory
+        if sentiment_score < -0.3 and has_praise:
+            is_flagged = True
+
+        # Rule 3 – Ironic-praise phrase combined with a severity keyword
+        if has_ironic and has_severity:
+            is_flagged = True
+
+        # Rule 4 – Praise word AND severity keyword both present regardless of
+        # net sentiment score (e.g. "Love the car, except it nearly killed me").
+        # Net TextBlob score can be mild/positive even for contradictory reviews
+        # where praise dilutes the overall score.
+        if has_praise and has_severity:
+            is_flagged = True
+
+
+        if is_flagged:
+            flagged.append(review)
+        else:
+            clean.append(review)
+
+    return {"clean": clean, "flagged": flagged}
+
+
+# ---------------------------------------------------------------------------
+
 class DataPreprocessor:
+
     """
     Preprocesses both structured and unstructured data for FMEA generation
     """

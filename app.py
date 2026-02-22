@@ -20,7 +20,7 @@ import io
 sys.path.append(str(Path(__file__).parent / 'src'))
 
 from fmea_generator import FMEAGenerator
-from preprocessing import DataPreprocessor
+from preprocessing import DataPreprocessor, flag_ambiguous_reviews
 from llm_extractor import LLMExtractor
 from risk_scoring import RiskScoringEngine
 
@@ -381,6 +381,7 @@ def main():
                                         texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
                                         fmea_df = generator.generate_from_text(texts, is_file=False)
                                         st.session_state['fmea_df'] = fmea_df
+                                        st.session_state['raw_reviews'] = texts
                                 else:
                                     st.error(extracted_text)
             else:
@@ -396,6 +397,7 @@ def main():
                         texts = [line.strip() for line in text_input.split('\n') if line.strip()]
                         fmea_df = generator.generate_from_text(texts, is_file=False)
                         st.session_state['fmea_df'] = fmea_df
+                        st.session_state['raw_reviews'] = texts
         
         elif input_type == "Structured File (CSV/Excel)":
             uploaded_file = st.file_uploader(
@@ -497,6 +499,31 @@ def main():
             ]
             
             st.dataframe(filtered_df, use_container_width=True, height=400)
+
+            # ---------------------------------------------------------------
+            # Sarcasm / Ambiguity expander
+            # ---------------------------------------------------------------
+            raw_reviews = st.session_state.get('raw_reviews', [])
+            if raw_reviews:
+                sarcasm_result = flag_ambiguous_reviews(raw_reviews)
+                flagged_reviews = sarcasm_result['flagged']
+                expander_label = (
+                    f"⚠️ Ambiguous Reviews Flagged for Human Review "
+                    f"({len(flagged_reviews)} found)"
+                    if flagged_reviews
+                    else "⚠️ Ambiguous Reviews Flagged for Human Review (none)"
+                )
+                with st.expander(expander_label):
+                    if flagged_reviews:
+                        st.markdown(
+                            "These reviews show signs of **sarcasm or contradictory "
+                            "sentiment** and may skew FMEA severity scores. "
+                            "Please review manually before trusting LLM output."
+                        )
+                        for i, rev in enumerate(flagged_reviews, start=1):
+                            st.warning(f"{i}. {rev}")
+                    else:
+                        st.success("✅ No ambiguous or sarcastic reviews detected.")
             
             # Export options
             st.markdown("---")
