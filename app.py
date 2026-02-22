@@ -1344,7 +1344,7 @@ def main():
 
             # Styled dataframe
             if not city_df.empty:
-                styled = city_df.style.applymap(
+                styled = city_df.style.map(
                     color_risk_level, subset=["risk_level"]
                 )
                 st.dataframe(styled, use_container_width=True)
