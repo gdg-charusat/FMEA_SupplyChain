@@ -6,6 +6,7 @@ Allows running the system without the dashboard
 import argparse
 import sys
 from pathlib import Path
+from datetime import datetime
 import yaml
 import pandas as pd
 
@@ -53,8 +54,9 @@ Examples:
     parser.add_argument(
         '--output', '-o',
         type=str,
-        required=True,
-        help='Output file path for generated FMEA'
+        required=False,
+        default=None,
+        help='Output file path for generated FMEA (default: output/fmea_output_<timestamp>.xlsx)'
     )
     
     parser.add_argument(
@@ -136,7 +138,15 @@ Examples:
     print(f"\n✅ FMEA generated successfully with {len(fmea_df)} entries")
     
     # Export
-    output_path = Path(args.output)
+    # If no output specified, use default with timestamp
+    if args.output is None:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        extension = 'xlsx' if args.format == 'excel' else args.format
+        output_filename = f"fmea_output_{timestamp}.{extension}"
+        output_path = Path("output") / output_filename
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        output_path = Path(args.output)
     
     if args.format == 'json':
         from utils import export_to_json
@@ -144,7 +154,7 @@ Examples:
     else:
         generator.export_fmea(fmea_df, str(output_path), format=args.format)
     
-    print(f"📁 FMEA exported to: {output_path}")
+    print(f"✅ FMEA saved to: {output_path}")
     
     # Print summary if requested
     if args.summary:
