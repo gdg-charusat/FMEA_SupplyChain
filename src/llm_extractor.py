@@ -14,10 +14,16 @@ from typing import Dict, List, Optional, Union
 import json
 import re
 import logging
+import threading
 from pathlib import Path
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+# Global lock for GPU inference to prevent concurrent OOM
+_GPU_LOCK = threading.Lock()
+# Global lock for model loading to prevent redundant loading or race conditions
+_LOAD_LOCK = threading.Lock()
 
 
 class LLMExtractor:
@@ -40,7 +46,9 @@ class LLMExtractor:
         self.tokenizer = None
         self.pipeline = None
         
-        self._load_model()
+        # Load model using global lock to prevent race conditions
+        with _LOAD_LOCK:
+            self._load_model()
     
     def _load_model(self):
         """Load the LLM model and tokenizer"""
@@ -124,28 +132,38 @@ class LLMExtractor:
             # Fallback to rule-based extraction
             return self._rule_based_extraction(text)
         
-        try:
-            # Format prompt
-            prompt = self.prompts.get('failure_extraction', '').format(text=text)
-            
-            # Generate response
-            response = self.pipeline(
-                prompt,
-                max_new_tokens=self.model_config.get('max_length', 512),
-                return_full_text=False
-            )[0]['generated_text']
-            
-            # Parse JSON response
-            extracted_info = self._parse_llm_response(response)
-            
-            # Validate and clean
-            extracted_info = self._validate_extraction(extracted_info)
-            
-            return extracted_info
-            
-        except Exception as e:
-            logger.error(f"Error in LLM extraction: {e}")
-            return self._rule_based_extraction(text)
+        # Use global GPU lock to prevent concurrent inference OOM
+        with _GPU_LOCK:
+            try:
+                # Format prompt
+                prompt = self.prompts.get('failure_extraction', '').format(text=text)
+                
+                # Generate response
+                response = self.pipeline(
+                    prompt,
+                    max_new_tokens=self.model_config.get('max_length', 512),
+                    return_full_text=False
+                )[0]['generated_text']
+                
+                # Parse JSON response
+                extracted_info = self._parse_llm_response(response)
+                
+                # Validate and clean
+                extracted_info = self._validate_extraction(extracted_info)
+                
+                return extracted_info
+                
+            except torch.cuda.OutOfMemoryError:
+                logger.error("CUDA Out of Memory during inference. Falling back to rule-based.")
+                torch.cuda.empty_cache()
+                return self._rule_based_extraction(text)
+            except Exception as e:
+                logger.error(f"Error in LLM extraction: {e}")
+                return self._rule_based_extraction(text)
+            finally:
+                # Optional: proactive cache clearing if the request was large
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
     
     def _parse_llm_response(self, response: str) -> Dict[str, str]:
         """

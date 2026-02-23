@@ -319,6 +319,18 @@ def main():
         output_format = st.selectbox("Export Format:", ["Excel", "CSV"])
         
         st.markdown("---")
+        st.markdown("### 🖥️ GPU Status")
+        import torch
+        if torch.cuda.is_available():
+            mem_allocated = torch.cuda.memory_allocated() / 1024**3
+            mem_reserved = torch.cuda.memory_reserved() / 1024**3
+            st.success(f"GPU Available: {torch.cuda.get_device_name(0)}")
+            st.write(f"Memory Allocated: {mem_allocated:.2f} GB")
+            st.write(f"Memory Reserved: {mem_reserved:.2f} GB")
+        else:
+            st.warning("GPU Not Available - Using CPU")
+
+        st.markdown("---")
         st.markdown("### 📖 About")
         st.info("""
         This system uses LLMs to automatically generate FMEA from:
@@ -331,6 +343,7 @@ def main():
         - Automated risk scoring
         - Visual analytics
         - Export capabilities
+        - **NEW: Resource Management & OOM Protection**
         """)
     
     # Main content area

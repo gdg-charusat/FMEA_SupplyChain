@@ -1,5 +1,4 @@
 # Core Dependencies
-python>=3.9
 
 # Data Processing
 pandas>=2.0.0
