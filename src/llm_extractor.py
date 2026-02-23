@@ -61,8 +61,7 @@ class LLMExtractor:
             
             # Load tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(
-                model_name,
-                trust_remote_code=True
+                model_name
             )
             
             if self.tokenizer.pad_token is None:
@@ -78,7 +77,6 @@ class LLMExtractor:
                 model_name,
                 quantization_config=quantization_config,
                 device_map=device if device == 'auto' else None,
-                trust_remote_code=True,
                 torch_dtype=torch.float16 if device != 'cpu' else torch.float32
             )
             

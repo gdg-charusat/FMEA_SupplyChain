@@ -409,12 +409,13 @@ def main():
                     f.write(uploaded_file.getbuffer())
                 
                 if st.button("🚀 Generate FMEA", type="primary"):
-                    with st.spinner("Processing structured data..."):
-                        generator = initialize_generator(config)
-                        fmea_df = generator.generate_from_structured(str(temp_path))
-                        st.session_state['fmea_df'] = fmea_df
-                    
-                    temp_path.unlink()
+                    try:
+                        with st.spinner("Processing structured data..."):
+                            generator = initialize_generator(config)
+                            fmea_df = generator.generate_from_structured(str(temp_path))
+                            st.session_state['fmea_df'] = fmea_df
+                    finally:
+                        temp_path.unlink(missing_ok=True)
         
         else:  # Hybrid
             st.markdown("**Upload both structured and unstructured data:**")
