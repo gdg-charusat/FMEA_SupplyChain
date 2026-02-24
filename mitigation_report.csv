@@ -1,0 +1,11 @@
+Route Strategy,Original Plan (Standard),New Mitigation Plan (Post-Alert),Status
+To Atlanta,Route 7: 1100 Units,Route 7: 1100 Units,⚪ UNCHANGED
+To Boston,Route 1: 800 Units,Route 1: 800 Units,⚪ UNCHANGED
+To Chicago,Route 4: 1000 Units,Route 4: 1000 Units,⚪ UNCHANGED
+To Dallas,Route 9: 950 Units,Route 9: 950 Units,⚪ UNCHANGED
+To Detroit,Route 5: 700 Units,Route 5: 700 Units,⚪ UNCHANGED
+To Houston,Route 8: 800 Units,Route 8: 800 Units,⚪ UNCHANGED
+To Miami,Route 6: 900 Units,Route 6: 900 Units,⚪ UNCHANGED
+To NewYork,Route 2: 1200 Units,Route 2: 1200 Units,⚠️ Higher Cost (Forced)
+To Philadelphia,Route 3: 600 Units,Route 3: 600 Units,⚠️ Higher Cost (Forced)
+To Phoenix,Route 10: 750 Units,Route 10: 750 Units,⚪ UNCHANGED

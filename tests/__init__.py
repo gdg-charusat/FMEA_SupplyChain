@@ -1,0 +1,3 @@
+"""
+Initialize tests package
+"""

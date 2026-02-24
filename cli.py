@@ -10,7 +10,7 @@ import yaml
 import pandas as pd
 
 # Add src directory to path
-sys.path.append(str(Path(__file__).parent.parent / 'src'))
+sys.path.append(str(Path(__file__).parent / 'src'))
 
 from fmea_generator import FMEAGenerator
 from utils import setup_logging, load_config, generate_summary_report
