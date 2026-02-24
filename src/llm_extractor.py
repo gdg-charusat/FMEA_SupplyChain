@@ -25,6 +25,15 @@ class LLMExtractor:
     Uses LLM to extract failure mode, effect, cause, and related information from text
     """
     
+    # SECURITY: Whitelist of trusted models
+    TRUSTED_MODELS = [
+        'mistralai/Mistral-7B-Instruct-v0.2',
+        'meta-llama/Llama-2-7b-chat-hf',
+        'meta-llama/Llama-2-13b-chat-hf',
+        'google/flan-t5-base',
+        'google/flan-t5-large',
+    ]
+    
     def __init__(self, config: Dict):
         """
         Initialize LLM extractor with model configuration
@@ -42,9 +51,27 @@ class LLMExtractor:
         
         self._load_model()
     
+    def _validate_model_name(self, model_name: str) -> bool:
+        """
+        Validate model name against whitelist
+        
+        Args:
+            model_name: Model identifier from config
+            
+        Returns:
+            True if model is trusted, False otherwise
+        """
+        return model_name in self.TRUSTED_MODELS
+    
     def _load_model(self):
         """Load the LLM model and tokenizer"""
         model_name = self.model_config.get('name', 'mistralai/Mistral-7B-Instruct-v0.2')
+        
+        # SECURITY: Validate model against whitelist
+        if not self._validate_model_name(model_name):
+            logger.error(f"Model '{model_name}' not in whitelist. Falling back to rule-based extraction.")
+            self.pipeline = None
+            return
         
         logger.info(f"Loading model: {model_name}")
         
@@ -59,10 +86,10 @@ class LLMExtractor:
                     bnb_4bit_use_double_quant=True,
                 )
             
-            # Load tokenizer
+            # Load tokenizer - SECURITY: trust_remote_code=False
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
-                trust_remote_code=True
+                trust_remote_code=False
             )
             
             if self.tokenizer.pad_token is None:
@@ -73,12 +100,12 @@ class LLMExtractor:
             if device == 'auto':
                 device = 'cuda' if torch.cuda.is_available() else 'cpu'
             
-            # Load model
+            # Load model - SECURITY: trust_remote_code=False
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 quantization_config=quantization_config,
                 device_map=device if device == 'auto' else None,
-                trust_remote_code=True,
+                trust_remote_code=False,
                 torch_dtype=torch.float16 if device != 'cpu' else torch.float32
             )
             
