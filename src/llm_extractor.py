@@ -14,17 +14,10 @@ from typing import Dict, List, Optional, Union
 import json
 import re
 import logging
-import os
-import threading
 from pathlib import Path
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-
-# Global lock for GPU inference to prevent concurrent OOM
-_GPU_LOCK = threading.Lock()
-# Global lock for model loading to prevent redundant loading or race conditions
-_LOAD_LOCK = threading.Lock()
 
 
 class LLMExtractor:
@@ -47,16 +40,11 @@ class LLMExtractor:
         self.tokenizer = None
         self.pipeline = None
         
-        # Load model (locking is handled inside _load_model)
         self._load_model()
     
     def _load_model(self):
         """Load the LLM model and tokenizer"""
-        with _LOAD_LOCK:
-            if self.model is not None:
-                return
-            
-            model_name = self.model_config.get('name', 'mistralai/Mistral-7B-Instruct-v0.2')
+        model_name = self.model_config.get('name', 'mistralai/Mistral-7B-Instruct-v0.2')
         
         logger.info(f"Loading model: {model_name}")
         
@@ -73,7 +61,8 @@ class LLMExtractor:
             
             # Load tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(
-                model_name
+                model_name,
+                trust_remote_code=True
             )
             
             if self.tokenizer.pad_token is None:
@@ -89,6 +78,7 @@ class LLMExtractor:
                 model_name,
                 quantization_config=quantization_config,
                 device_map=device if device == 'auto' else None,
+                trust_remote_code=True,
                 torch_dtype=torch.float16 if device != 'cpu' else torch.float32
             )
             
@@ -134,47 +124,28 @@ class LLMExtractor:
             # Fallback to rule-based extraction
             return self._rule_based_extraction(text)
         
-        # Use global GPU lock to prevent concurrent inference OOM (only if using CUDA)
-        device = self.model_config.get('device', 'auto')
-        if device == 'auto':
-            is_cuda = torch.cuda.is_available()
-        else:
-            is_cuda = 'cuda' in device
+        try:
+            # Format prompt
+            prompt = self.prompts.get('failure_extraction', '').format(text=text)
             
-        with _GPU_LOCK if is_cuda else open(os.devnull, 'w'): # Dummy context if not CUDA
-            try:
-                # Format prompt safely
-                from string import Template
-                prompt_template = Template(self.prompts.get('failure_extraction', ''))
-                prompt = prompt_template.safe_substitute(text=text)
-                
-                # Generate response
-                response = self.pipeline(
-                    prompt,
-                    max_new_tokens=self.model_config.get('max_length', 512),
-                    return_full_text=False
-                )[0]['generated_text']
-                
-                # Parse JSON response
-                extracted_info = self._parse_llm_response(response)
-                
-                # Validate and clean
-                extracted_info = self._validate_extraction(extracted_info)
-                
-                return extracted_info
-                
-            except (torch.cuda.OutOfMemoryError, RuntimeError) as e:
-                if isinstance(e, RuntimeError) and "out of memory" not in str(e).lower():
-                    logger.error(f"Error in LLM extraction: {e}")
-                    return self._rule_based_extraction(text)
-                
-                logger.error("CUDA Out of Memory during inference. Falling back to rule-based.")
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                return self._rule_based_extraction(text)
-            except Exception as e:
-                logger.error(f"Error in LLM extraction: {e}")
-                return self._rule_based_extraction(text)
+            # Generate response
+            response = self.pipeline(
+                prompt,
+                max_new_tokens=self.model_config.get('max_length', 512),
+                return_full_text=False
+            )[0]['generated_text']
+            
+            # Parse JSON response
+            extracted_info = self._parse_llm_response(response)
+            
+            # Validate and clean
+            extracted_info = self._validate_extraction(extracted_info)
+            
+            return extracted_info
+            
+        except Exception as e:
+            logger.error(f"Error in LLM extraction: {e}")
+            return self._rule_based_extraction(text)
     
     def _parse_llm_response(self, response: str) -> Dict[str, str]:
         """
