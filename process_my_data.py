@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 import pandas as pd
 
-# Add src directory to path
+
 sys.path.append(str(Path(__file__).parent / 'src'))
 
 from fmea_generator import FMEAGenerator
