@@ -1,0 +1,9 @@
+failure_mode,effect,cause,component,process,severity,occurrence,detection,existing_controls,recommended_action,responsibility
+Engine fails to start,Vehicle cannot be operated,Battery dead or starter motor malfunction,Engine Starter System,Engine Start,8,3,9,Visual battery inspection,Replace battery or repair starter motor,Maintenance Team
+Brake fluid leak,Loss of braking power and safety hazard,Corroded brake line or failed seal,Brake System,Braking Operation,9,2,7,Regular brake fluid level checks,Replace corroded brake lines and seals,Safety Engineer
+Paint cracking,Reduced vehicle aesthetics and corrosion risk,Poor surface preparation before painting,Paint System,Paint Application,5,4,6,Visual paint quality inspection,Improve surface preparation process,Quality Control
+Transmission slipping,Reduced vehicle acceleration and control,Low transmission fluid or worn clutch,Transmission Assembly,Power Transmission,7,3,5,Fluid level monitoring,Replace transmission fluid or repair clutch,Powertrain Team
+Air conditioning not cooling,Customer discomfort and climate control failure,Refrigerant leak or compressor failure,AC System,Climate Control,6,2,4,Regular AC maintenance check,Repair/replace AC compressor and seals,Service Team
+Abnormal engine vibration,Uncomfortable ride and potential component damage,Misaligned wheels or worn suspension,Suspension System,Vehicle Suspension,5,5,7,Wheel alignment inspection,Perform wheel realignment and suspension service,Alignment Specialist
+Rust on body panels,Structural weakness and aesthetic degradation,Inadequate rust protection coating,Body Panels,Anti-corrosion Process,6,4,5,Rust prevention coating application,Improve rust protection coating,Paint Team
+Jerky transmission,Poor driving experience and transmission stress,Faulty transmission control module,Transmission Controller,Electronic Control,6,3,4,Transmission software diagnostic,Update/reprogram transmission control module,Electronics Engineer

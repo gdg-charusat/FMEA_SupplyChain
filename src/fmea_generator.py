@@ -98,7 +98,14 @@ class FMEAGenerator:
         logger.info(f"Generating FMEA from structured file: {file_path}")
         
         # Step 1: Load and validate structured data
-        structured_df = self.preprocessor.load_structured_data(file_path)
+        result = self.preprocessor.load_structured_data(file_path)
+        
+        # Handle both tuple (new) and DataFrame (old) return types for backward compatibility
+        if isinstance(result, tuple):
+            structured_df, validation_result = result
+            logger.info(f"Validation result: {validation_result.valid_records}/{validation_result.total_records} records valid")
+        else:
+            structured_df = result
         
         # Step 2: Check if risk scores already exist
         has_scores = all(col in structured_df.columns 
