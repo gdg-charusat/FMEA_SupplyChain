@@ -24,6 +24,8 @@ from preprocessing import DataPreprocessor
 from llm_extractor import LLMExtractor
 from risk_scoring import RiskScoringEngine
 from ocr_processor import OCRProcessor
+from history_tracker import FMEAHistoryTracker
+from voice_input import VoiceInputProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -313,7 +315,7 @@ def main():
         st.markdown("### 📊 Input Options")
         input_type = st.radio(
             "Select Input Type:",
-            ["Unstructured Text", "Structured File (CSV/Excel)", "Hybrid (Both)", "📷 Scan Document (OCR)"]
+            ["Unstructured Text", "Structured File (CSV/Excel)", "Hybrid (Both)", "📷 Scan Document (OCR)", "🎙️ Voice Input"]
         )
         
         st.markdown("---")
@@ -335,6 +337,18 @@ def main():
         # Output format
         output_format = st.selectbox("Export Format:", ["Excel", "CSV"])
         
+        # Whisper model size (shown when Voice Input selected)
+        if input_type == "🎙️ Voice Input":
+            st.markdown("---")
+            st.markdown("### 🎙️ Voice Settings")
+            whisper_model_size = st.selectbox(
+                "Whisper Model Size:",
+                ["tiny (~39 MB)", "base (~140 MB)", "small (~461 MB)", "medium (~1.5 GB)"],
+                index=1
+            )
+            # Extract just the model name
+            st.session_state['whisper_model_size'] = whisper_model_size.split(" ")[0]
+        
         st.markdown("---")
         st.markdown("### 📖 About")
         st.info("""
@@ -351,11 +365,12 @@ def main():
         """)
     
     # Main content area
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📝 Generate FMEA", 
         "🎯 PFMEA Generator", 
         "🚚 Supply Chain Risk",
-        "📊 Analytics", 
+        "📊 Analytics",
+        "📈 History & Trends",
         "ℹ️ Help"
     ])
     
@@ -398,6 +413,7 @@ def main():
                                         texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
                                         fmea_df = generator.generate_from_text(texts, is_file=False)
                                         st.session_state['fmea_df'] = fmea_df
+                                        st.session_state['fmea_saved'] = False
                                 else:
                                     st.error(extracted_text)
             else:
@@ -413,6 +429,7 @@ def main():
                         texts = [line.strip() for line in text_input.split('\n') if line.strip()]
                         fmea_df = generator.generate_from_text(texts, is_file=False)
                         st.session_state['fmea_df'] = fmea_df
+                        st.session_state['fmea_saved'] = False
 
         elif input_type == "📷 Scan Document (OCR)":
             st.markdown("**Upload an image or PDF for OCR extraction:**")
@@ -473,7 +490,59 @@ def main():
                             texts = [line.strip() for line in edited_text.split('\n') if line.strip()]
                             fmea_df = generator.generate_from_text(texts, is_file=False)
                             st.session_state['fmea_df'] = fmea_df
+                            st.session_state['fmea_saved'] = False
         
+        elif input_type == "🎙️ Voice Input":
+            st.markdown("**🎙️ Record your failure description:**")
+            st.info("Click the microphone button below, speak your failure description clearly, then click stop.")
+
+            try:
+                from audio_recorder_streamlit import audio_recorder
+                audio_bytes = audio_recorder(
+                    text="Click to record",
+                    recording_color="#e74c3c",
+                    neutral_color="#1f77b4",
+                    pause_threshold=3.0
+                )
+            except ImportError:
+                st.error("Audio recorder component not installed. Run: pip install audio-recorder-streamlit")
+                audio_bytes = None
+
+            if audio_bytes:
+                # Show audio playback
+                st.audio(audio_bytes, format="audio/wav")
+
+                # Transcribe with Whisper
+                whisper_size = st.session_state.get('whisper_model_size', 'base')
+                with st.spinner(f"Transcribing audio with Whisper ({whisper_size} model)..."):
+                    try:
+                        processor = VoiceInputProcessor(model_size=whisper_size)
+                        transcribed_text = processor.transcribe(audio_bytes)
+                    except Exception as e:
+                        st.error(f"Transcription failed: {e}")
+                        transcribed_text = ""
+
+                # Validate transcription
+                validation = processor.validate_transcription(transcribed_text)
+
+                if validation["valid"]:
+                    edited_text = st.text_area(
+                        "Review and correct transcription before generating FMEA:",
+                        value=transcribed_text,
+                        height=150,
+                        key="voice_transcription"
+                    )
+
+                    if st.button("🚀 Generate FMEA from Voice Input", type="primary"):
+                        with st.spinner("Generating FMEA from voice input..."):
+                            generator = initialize_generator(config)
+                            texts = [line.strip() for line in edited_text.split('\n') if line.strip()]
+                            fmea_df = generator.generate_from_text(texts, is_file=False)
+                            st.session_state['fmea_df'] = fmea_df
+                else:
+                    st.error(f"⚠️ {validation['reason']}")
+                    st.warning("Please record again with a clear, longer description.")
+
         elif input_type == "Structured File (CSV/Excel)":
             uploaded_file = st.file_uploader(
                 "Upload structured FMEA file (CSV or Excel)",
@@ -490,6 +559,7 @@ def main():
                         generator = initialize_generator(config)
                         fmea_df = generator.generate_from_structured(str(temp_path))
                         st.session_state['fmea_df'] = fmea_df
+                        st.session_state['fmea_saved'] = False
                     
                     temp_path.unlink()
         
@@ -536,6 +606,7 @@ def main():
                         text_input=text_data if text_data else None
                     )
                     st.session_state['fmea_df'] = fmea_df
+                    st.session_state['fmea_saved'] = False
                     
                     # Cleanup
                     if structured_path:
@@ -544,6 +615,13 @@ def main():
         # Display results
         if 'fmea_df' in st.session_state:
             st.success("✅ FMEA Generated Successfully!")
+            
+            # Auto-save the run (only once per generation to avoid duplicate saves on rerun)
+            if not st.session_state.get('fmea_saved', False):
+                tracker = FMEAHistoryTracker("history")
+                run_id = tracker.save_run(st.session_state['fmea_df'], label=f"Run {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                st.caption(f"💾 Run saved (ID: {run_id})")
+                st.session_state['fmea_saved'] = True
             
             fmea_df = st.session_state['fmea_df']
             
@@ -736,6 +814,7 @@ def main():
                             
                             # Store in session state for Analytics tab
                             st.session_state['fmea_df'] = combined_df
+                            st.session_state['fmea_saved'] = False
                             
                             st.success(f"✅ Generated {len(combined_df)} PFMEA record(s)")
                             
@@ -1034,7 +1113,6 @@ def main():
                     
                     # Calculate detailed costs
                     from mitigation_module.dynamic_network import get_route_cost, get_full_route_map
-                    import pandas as pd
                     
                     # Load CSV for accurate costs
                     csv_path = 'Dataset_AI_Supply_Optimization.csv'
@@ -1338,6 +1416,165 @@ def main():
             st.info("Generate an FMEA first to see analytics.")
     
     with tab5:
+        st.markdown('<div class="sub-header">📈 History & Trends</div>', unsafe_allow_html=True)
+        
+        tracker = FMEAHistoryTracker("history")
+        runs = tracker.list_runs()
+        
+        if not runs:
+            st.info("No FMEA runs saved yet. Generate a FMEA to get started!")
+        else:
+            # Create tabs for different views
+            history_view1, history_view2 = st.tabs(["📊 Run Comparison", "📈 Trend Chart"])
+            
+            with history_view1:
+                st.markdown("### Compare Two Runs")
+                
+                col1, col2 = st.columns(2)
+                
+                # Run selection dropdowns
+                run_labels = [f"{run['label']} ({run['timestamp'][:10]})" for run in runs]
+                run_ids = [run['run_id'] for run in runs]
+                
+                with col1:
+                    selected_run1_idx = st.selectbox(
+                        "Select First Run (earlier):",
+                        range(len(runs)),
+                        format_func=lambda i: run_labels[i],
+                        key="run1_select"
+                    )
+                
+                with col2:
+                    # Only allow selecting runs that are after the first run chronologically
+                    default_idx = max(0, selected_run1_idx - 1)
+                    selected_run2_idx = st.selectbox(
+                        "Select Second Run (later):",
+                        range(len(runs)),
+                        index=default_idx,
+                        format_func=lambda i: run_labels[i],
+                        key="run2_select"
+                    )
+                
+                if selected_run1_idx != selected_run2_idx:
+                    run_id_1 = run_ids[selected_run1_idx]
+                    run_id_2 = run_ids[selected_run2_idx]
+                    
+                    # Get comparison
+                    comparison_df = tracker.compare_runs(run_id_1, run_id_2)
+                    
+                    if comparison_df is not None:
+                        st.markdown("---")
+                        
+                        # Display comparison stats
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            improved_count = len(comparison_df[comparison_df['Status'] == 'improved'])
+                            st.metric("✅ Improved", improved_count)
+                        
+                        with col2:
+                            worsened_count = len(comparison_df[comparison_df['Status'] == 'worsened'])
+                            st.metric("⚠️ Worsened", worsened_count)
+                        
+                        with col3:
+                            new_count = len(comparison_df[comparison_df['Status'] == 'new'])
+                            st.metric("🆕 New", new_count)
+                        
+                        with col4:
+                            resolved_count = len(comparison_df[comparison_df['Status'] == 'resolved'])
+                            st.metric("✔️ Resolved", resolved_count)
+                        
+                        st.markdown("---")
+                        
+                        # Display comparison table with color coding
+                        st.markdown("### Detailed Comparison")
+                        
+                        # Create styled dataframe
+                        def style_status(val):
+                            if val == 'improved':
+                                return 'background-color: #90EE90; color: green; font-weight: bold;'
+                            elif val == 'worsened':
+                                return 'background-color: #FFB6C6; color: red; font-weight: bold;'
+                            elif val == 'new':
+                                return 'background-color: #FFE4B5; color: orange; font-weight: bold;'
+                            elif val == 'resolved':
+                                return 'background-color: #87CEEB; color: blue; font-weight: bold;'
+                            else:
+                                return ''
+                        
+                        # Display the comparison table
+                        st.dataframe(
+                            comparison_df,
+                            use_container_width=True,
+                            height=500,
+                            hide_index=True
+                        )
+                    else:
+                        st.error("Could not compare the selected runs.")
+                else:
+                    st.warning("Please select two different runs to compare.")
+            
+            with history_view2:
+                st.markdown("### RPN Trend Chart")
+                
+                trend_data = tracker.get_trend_data(limit=5)
+                
+                if trend_data["run_labels"]:
+                    st.markdown("**Top 5 Failure Modes Over Time**")
+                    
+                    # Prepare data for line chart
+                    trend_df_data = {
+                        "Run": trend_data["run_labels"]
+                    }
+                    
+                    num_runs = len(trend_data["run_labels"])
+                    for mode in trend_data["failure_modes"]:
+                        if mode in trend_data["trend_data"]:
+                            values = trend_data["trend_data"][mode]
+                            # Pad or trim to match run_labels length
+                            if len(values) < num_runs:
+                                values = values + [0] * (num_runs - len(values))
+                            elif len(values) > num_runs:
+                                values = values[:num_runs]
+                            trend_df_data[mode] = values
+                    
+                    trend_df = pd.DataFrame(trend_df_data)
+                    
+                    # Create line chart
+                    fig = px.line(
+                        trend_df,
+                        x="Run",
+                        y=trend_data["failure_modes"],
+                        title="RPN Trend for Top Failure Modes",
+                        labels={"value": "RPN", "variable": "Failure Mode"},
+                        markers=True
+                    )
+                    
+                    fig.update_xaxes(tickangle=-45)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Not enough runs to display trends.")
+            
+            # Display all runs as a table
+            st.markdown("---")
+            st.markdown("### 📋 All Saved Runs")
+            
+            # Convert runs to DataFrame for display
+            runs_df = pd.DataFrame([
+                {
+                    "Run ID": run['run_id'],
+                    "Label": run['label'],
+                    "Timestamp": run['timestamp'],
+                    "Row Count": run['row_count'],
+                    "Avg RPN": f"{run['average_rpn']:.1f}",
+                    "Critical Count": run['critical_count']
+                }
+                for run in runs
+            ])
+            
+            st.dataframe(runs_df, use_container_width=True, hide_index=True)
+    
+    with tab6:
         st.markdown('<div class="sub-header">Help & Documentation</div>', unsafe_allow_html=True)
         
         st.markdown("""
