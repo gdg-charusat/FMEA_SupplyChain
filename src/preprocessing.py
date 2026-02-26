@@ -9,6 +9,7 @@ from typing import Dict, List, Union, Optional
 import re
 from pathlib import Path
 import logging
+from tqdm import tqdm
 
 # Text processing libraries
 from textblob import TextBlob
@@ -179,11 +180,14 @@ class DataPreprocessor:
         if file_path.suffix.lower() == '.csv':
             # Try multiple encoding and error handling strategies
             try:
+                logger.info("Loading CSV file...")
                 df = pd.read_csv(file_path, encoding='utf-8', on_bad_lines='skip', low_memory=False)
             except:
                 try:
+                    logger.info("Retrying with latin-1 encoding...")
                     df = pd.read_csv(file_path, encoding='latin-1', on_bad_lines='skip', low_memory=False)
                 except:
+                    logger.info("Retrying with iso-8859-1 encoding...")
                     df = pd.read_csv(file_path, encoding='iso-8859-1', on_bad_lines='skip', engine='python')
         elif file_path.suffix.lower() in ['.xlsx', '.xls']:
             df = pd.read_excel(file_path)
@@ -228,11 +232,13 @@ class DataPreprocessor:
         min_length = self.config.get('text_processing', {}).get('min_review_length', 10)
         df = df[df['text'].str.len() >= min_length]
         
-        # Clean text
-        df['text_cleaned'] = df['text'].apply(self._clean_text)
+        # Clean text 
+        tqdm.pandas(desc="Cleaning text")
+        df['text_cleaned'] = df['text'].progress_apply(self._clean_text)
         
-        # Calculate sentiment
-        df['sentiment'] = df['text_cleaned'].apply(self._get_sentiment)
+        # Calculate sentiment 
+        tqdm.pandas(desc="Analyzing sentiment")
+        df['sentiment'] = df['text_cleaned'].progress_apply(self._get_sentiment)
         
         return df
     

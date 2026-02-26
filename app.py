@@ -23,6 +23,7 @@ from fmea_generator import FMEAGenerator
 from preprocessing import DataPreprocessor
 from llm_extractor import LLMExtractor
 from risk_scoring import RiskScoringEngine
+from ocr_processor import OCRProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -276,6 +277,22 @@ def extract_text_from_image(image_file):
         return f"Error extracting text from image: {str(e)}\n\nDetails: {error_details}"
 
 
+def render_pdf_preview(pdf_bytes):
+    """Render the first page of a PDF as an image for preview."""
+    try:
+        import fitz
+        from PIL import Image as PILImage
+
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            if doc.page_count == 0:
+                return None
+            page = doc.load_page(0)
+            pix = page.get_pixmap(dpi=150, colorspace=fitz.csRGB)
+            return PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    except Exception:
+        return None
+
+
 def main():
     """Main application"""
     
@@ -296,7 +313,7 @@ def main():
         st.markdown("### 📊 Input Options")
         input_type = st.radio(
             "Select Input Type:",
-            ["Unstructured Text", "Structured File (CSV/Excel)", "Hybrid (Both)"]
+            ["Unstructured Text", "Structured File (CSV/Excel)", "Hybrid (Both)", "📷 Scan Document (OCR)"]
         )
         
         st.markdown("---")
@@ -396,6 +413,66 @@ def main():
                         texts = [line.strip() for line in text_input.split('\n') if line.strip()]
                         fmea_df = generator.generate_from_text(texts, is_file=False)
                         st.session_state['fmea_df'] = fmea_df
+
+        elif input_type == "📷 Scan Document (OCR)":
+            st.markdown("**Upload an image or PDF for OCR extraction:**")
+            uploaded_ocr_file = st.file_uploader(
+                "Upload JPG, JPEG, PNG, or PDF",
+                type=['jpg', 'jpeg', 'png', 'pdf'],
+                key='ocr_upload'
+            )
+
+            if uploaded_ocr_file:
+                file_bytes = uploaded_ocr_file.getvalue()
+                file_name = uploaded_ocr_file.name.lower()
+                file_key = f"ocr_{uploaded_ocr_file.name}_{len(file_bytes)}_{uploaded_ocr_file.type}"
+
+                if st.session_state.get('ocr_source_key') != file_key:
+                    with st.spinner("Extracting text from document..."):
+                        try:
+                            processor = OCRProcessor()
+                            if file_name.endswith('.pdf'):
+                                extracted_text = processor.extract_text_from_pdf(file_bytes)
+                            else:
+                                extracted_text = processor.extract_text_from_image(file_bytes)
+
+                            st.session_state['ocr_source_key'] = file_key
+                            st.session_state['ocr_text'] = extracted_text
+                            st.session_state['ocr_edit'] = extracted_text
+                        except Exception as e:
+                            st.session_state['ocr_text'] = ""
+                            st.session_state['ocr_edit'] = ""
+                            st.error(f"OCR failed: {e}")
+
+                col1, col2 = st.columns([1, 1])
+
+                with col1:
+                    if file_name.endswith('.pdf'):
+                        preview_image = render_pdf_preview(file_bytes)
+                        if preview_image:
+                            st.image(preview_image, caption="PDF Preview", use_column_width=True)
+                        else:
+                            st.info("PDF uploaded. Preview not available.")
+                    else:
+                        st.image(uploaded_ocr_file, caption="Uploaded Image", use_column_width=True)
+
+                with col2:
+                    st.text_area(
+                        "Extracted Text (editable):",
+                        height=300,
+                        key='ocr_edit'
+                    )
+
+                if st.button("🚀 Generate FMEA", type="primary"):
+                    edited_text = st.session_state.get('ocr_edit', '').strip()
+                    if not edited_text:
+                        st.warning("Please review or add text before generating FMEA.")
+                    else:
+                        with st.spinner("Generating FMEA from OCR text..."):
+                            generator = initialize_generator(config)
+                            texts = [line.strip() for line in edited_text.split('\n') if line.strip()]
+                            fmea_df = generator.generate_from_text(texts, is_file=False)
+                            st.session_state['fmea_df'] = fmea_df
         
         elif input_type == "Structured File (CSV/Excel)":
             uploaded_file = st.file_uploader(
