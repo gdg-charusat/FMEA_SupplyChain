@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 import logging
 from tqdm import tqdm
+import os
 
 # Text processing libraries
 from textblob import TextBlob
@@ -20,6 +21,11 @@ from nltk.tokenize import word_tokenize, sent_tokenize
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Resource limits
+MAX_FILE_SIZE_MB = 100
+MAX_ROWS = 50000
+MAX_TEXT_INPUT_LENGTH = 100000
 
 
 class DataPreprocessor:
@@ -51,25 +57,42 @@ class DataPreprocessor:
     
     def load_structured_data(self, file_path: str) -> pd.DataFrame:
         """
-        Load and validate structured data from CSV or Excel
+        Load and validate structured data from CSV or Excel with size limits
         
         Args:
             file_path: Path to the CSV or Excel file
             
         Returns:
             Validated DataFrame
+            
+        Raises:
+            ValueError: If file exceeds size limit
         """
         logger.info(f"Loading structured data from: {file_path}")
         
         file_path = Path(file_path)
         
-        # Load based on file extension
+        # Check file size before loading
+        file_size_mb = file_path.stat().st_size / (1024 * 1024)
+        if file_size_mb > MAX_FILE_SIZE_MB:
+            raise ValueError(
+                f"File size ({file_size_mb:.1f} MB) exceeds maximum allowed size ({MAX_FILE_SIZE_MB} MB). "
+                f"Please split the file or contact administrator."
+            )
+        
+        logger.info(f"File size: {file_size_mb:.2f} MB")
+        
+        # Load based on file extension with row limit
         if file_path.suffix.lower() == '.csv':
-            df = pd.read_csv(file_path, encoding='utf-8', on_bad_lines='skip')
+            df = pd.read_csv(file_path, encoding='utf-8', on_bad_lines='skip', nrows=MAX_ROWS)
         elif file_path.suffix.lower() in ['.xlsx', '.xls']:
-            df = pd.read_excel(file_path)
+            df = pd.read_excel(file_path, nrows=MAX_ROWS)
         else:
             raise ValueError(f"Unsupported file format: {file_path.suffix}")
+        
+        # Warn if rows were limited
+        if len(df) == MAX_ROWS:
+            logger.warning(f"File truncated to {MAX_ROWS} rows due to resource limits")
         
         # Validate and normalize
         df = self._validate_structured_data(df)
@@ -140,7 +163,7 @@ class DataPreprocessor:
     def load_unstructured_data(self, file_path: Optional[str] = None, 
                                text_data: Optional[List[str]] = None) -> pd.DataFrame:
         """
-        Load and preprocess unstructured text data (reviews, reports, etc.)
+        Load and preprocess unstructured text data (reviews, reports, etc.) with size limits
         
         Args:
             file_path: Path to file containing text data (CSV with reviews)
@@ -148,12 +171,25 @@ class DataPreprocessor:
             
         Returns:
             DataFrame with preprocessed text
+            
+        Raises:
+            ValueError: If input exceeds size limits
         """
         logger.info("Loading unstructured data...")
         
         if file_path:
+            # Check file size before loading
+            file_size_mb = Path(file_path).stat().st_size / (1024 * 1024)
+            if file_size_mb > MAX_FILE_SIZE_MB:
+                raise ValueError(
+                    f"File size ({file_size_mb:.1f} MB) exceeds maximum allowed size ({MAX_FILE_SIZE_MB} MB)"
+                )
             df = self._load_text_from_file(file_path)
         elif text_data:
+            # Limit number of text entries
+            if len(text_data) > MAX_ROWS:
+                logger.warning(f"Text data truncated from {len(text_data)} to {MAX_ROWS} entries")
+                text_data = text_data[:MAX_ROWS]
             df = pd.DataFrame({'text': text_data})
         else:
             raise ValueError("Either file_path or text_data must be provided")
@@ -167,7 +203,7 @@ class DataPreprocessor:
     
     def _load_text_from_file(self, file_path: str) -> pd.DataFrame:
         """
-        Load text data from file (CSV with review column)
+        Load text data from file (CSV with review column) with row limit
         
         Args:
             file_path: Path to the file
@@ -178,24 +214,28 @@ class DataPreprocessor:
         file_path = Path(file_path)
         
         if file_path.suffix.lower() == '.csv':
-            # Try multiple encoding and error handling strategies
+            # Try multiple encoding and error handling strategies with row limit
             try:
                 logger.info("Loading CSV file...")
-                df = pd.read_csv(file_path, encoding='utf-8', on_bad_lines='skip', low_memory=False)
+                df = pd.read_csv(file_path, encoding='utf-8', on_bad_lines='skip', low_memory=False, nrows=MAX_ROWS)
             except:
                 try:
                     logger.info("Retrying with latin-1 encoding...")
-                    df = pd.read_csv(file_path, encoding='latin-1', on_bad_lines='skip', low_memory=False)
+                    df = pd.read_csv(file_path, encoding='latin-1', on_bad_lines='skip', low_memory=False, nrows=MAX_ROWS)
                 except:
                     logger.info("Retrying with iso-8859-1 encoding...")
-                    df = pd.read_csv(file_path, encoding='iso-8859-1', on_bad_lines='skip', engine='python')
+                    df = pd.read_csv(file_path, encoding='iso-8859-1', on_bad_lines='skip', engine='python', nrows=MAX_ROWS)
         elif file_path.suffix.lower() in ['.xlsx', '.xls']:
-            df = pd.read_excel(file_path)
+            df = pd.read_excel(file_path, nrows=MAX_ROWS)
         else:
             # Assume plain text file
             with open(file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
+                lines = [f.readline() for _ in range(MAX_ROWS) if f.readline()]
             df = pd.DataFrame({'text': lines})
+        
+        # Warn if truncated
+        if len(df) == MAX_ROWS:
+            logger.warning(f"File truncated to {MAX_ROWS} rows due to resource limits")
         
         # Try to identify the text column
         text_columns = ['Review', 'review', 'text', 'comment', 'description', 'feedback']

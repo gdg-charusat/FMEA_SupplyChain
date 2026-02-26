@@ -1,0 +1,215 @@
+{
+  "info": {
+    "name": "FMEA Generator API",
+    "description": "REST API endpoints for FMEA generation and analysis",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["health"]
+        },
+        "description": "Check if API is running"
+      }
+    },
+    {
+      "name": "Generate FMEA from Text",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"texts\": [\n    \"Brake system failed completely while driving on highway at 70 mph. Unable to stop properly.\",\n    \"Engine overheated and seized. No warning lights appeared before failure.\",\n    \"Transmission slipping during acceleration. Gear changes are rough and delayed.\"\n  ]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/fmea/text",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "fmea", "text"]
+        },
+        "description": "Generate FMEA from unstructured text descriptions"
+      }
+    },
+    {
+      "name": "Generate FMEA from Structured File",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/file.csv",
+              "description": "Upload CSV or Excel file"
+            },
+            {
+              "key": "type",
+              "value": "structured",
+              "type": "text",
+              "description": "structured or unstructured"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/fmea/file",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "fmea", "file"]
+        },
+        "description": "Upload CSV/Excel file with structured FMEA data"
+      }
+    },
+    {
+      "name": "Generate FMEA from Unstructured File",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/reviews.csv",
+              "description": "Upload CSV with reviews/complaints"
+            },
+            {
+              "key": "type",
+              "value": "unstructured",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/fmea/file",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "fmea", "file"]
+        },
+        "description": "Upload CSV with customer reviews or complaints"
+      }
+    },
+    {
+      "name": "Generate Hybrid FMEA",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/structured.csv",
+              "description": "Structured FMEA file (optional)"
+            },
+            {
+              "key": "texts",
+              "value": "[\"Brake failure on highway\", \"Engine overheated\"]",
+              "type": "text",
+              "description": "JSON array of text descriptions (optional)"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/fmea/hybrid",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "fmea", "hybrid"]
+        },
+        "description": "Combine structured file and unstructured text"
+      }
+    },
+    {
+      "name": "Export FMEA to Excel",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"data\": [\n    {\n      \"Failure Mode\": \"Brake failure\",\n      \"Effect\": \"Unable to stop\",\n      \"Cause\": \"Worn pads\",\n      \"Component\": \"Brake System\",\n      \"Severity\": 10,\n      \"Occurrence\": 7,\n      \"Detection\": 8,\n      \"Rpn\": 560,\n      \"Action Priority\": \"Critical\"\n    }\n  ],\n  \"format\": \"excel\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/fmea/export",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "fmea", "export"]
+        },
+        "description": "Export FMEA data to Excel file"
+      }
+    },
+    {
+      "name": "Export FMEA to CSV",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"data\": [\n    {\n      \"Failure Mode\": \"Brake failure\",\n      \"Effect\": \"Unable to stop\",\n      \"Cause\": \"Worn pads\",\n      \"Component\": \"Brake System\",\n      \"Severity\": 10,\n      \"Occurrence\": 7,\n      \"Detection\": 8,\n      \"Rpn\": 560,\n      \"Action Priority\": \"Critical\"\n    }\n  ],\n  \"format\": \"csv\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/fmea/export",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "fmea", "export"]
+        },
+        "description": "Export FMEA data to CSV file"
+      }
+    },
+    {
+      "name": "Get FMEA Statistics",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"data\": [\n    {\n      \"Failure Mode\": \"Brake failure\",\n      \"Effect\": \"Unable to stop\",\n      \"Severity\": 10,\n      \"Occurrence\": 7,\n      \"Detection\": 8,\n      \"Rpn\": 560,\n      \"Action Priority\": \"Critical\"\n    },\n    {\n      \"Failure Mode\": \"Engine overheat\",\n      \"Effect\": \"Engine damage\",\n      \"Severity\": 9,\n      \"Occurrence\": 6,\n      \"Detection\": 7,\n      \"Rpn\": 378,\n      \"Action Priority\": \"High\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/fmea/stats",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "stats"]
+        },
+        "description": "Calculate statistics from FMEA data"
+      }
+    }
+  ]
+}

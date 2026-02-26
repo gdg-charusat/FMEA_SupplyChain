@@ -18,8 +18,37 @@ import datetime
 import os
 from pathlib import Path
 from tqdm import tqdm
+import signal
+from functools import wraps
 
 logger = logging.getLogger(__name__)
+
+# Resource limits
+MAX_BATCH_SIZE = 1000
+MAX_TEXT_LENGTH = 10000
+LLM_TIMEOUT_SECONDS = 30
+
+class TimeoutError(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Operation timed out")
+
+def with_timeout(seconds):
+    """Decorator to add timeout to function execution"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Set alarm signal
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)  # Disable alarm
+            return result
+        return wrapper
+    return decorator
 
 
 class LLMExtractor:
@@ -134,6 +163,11 @@ class LLMExtractor:
                 'existing_controls': str
             }
         """
+        # Enforce text length limit
+        if len(text) > MAX_TEXT_LENGTH:
+            logger.warning(f"Text truncated from {len(text)} to {MAX_TEXT_LENGTH} characters")
+            text = text[:MAX_TEXT_LENGTH]
+        
         if self.pipeline is None:
             # Fallback to rule-based extraction
             return self._rule_based_extraction(text)
@@ -141,7 +175,7 @@ class LLMExtractor:
         # First attempt with detailed prompt
         try:
             prompt = self._build_extraction_prompt(text)
-            response = self._generate_llm_response(prompt)
+            response = self._generate_llm_response_with_timeout(prompt)
             extracted_info = self._parse_llm_response(response)
             
             # Validate extraction
@@ -152,13 +186,13 @@ class LLMExtractor:
                 self._log_extraction_failure(text, response, "Invalid extraction - retrying")
                 raise ValueError("Invalid extraction format")
                 
-        except Exception as e:
+        except (TimeoutError, Exception) as e:
             logger.warning(f"First extraction attempt failed: {e}")
             
         # Retry attempt with stricter prompt  
         try:
             strict_prompt = self._build_strict_retry_prompt(text)
-            response = self._generate_llm_response(strict_prompt)
+            response = self._generate_llm_response_with_timeout(strict_prompt)
             extracted_info = self._parse_llm_response(response)
             
             if self._is_valid_extraction(extracted_info):
@@ -167,7 +201,7 @@ class LLMExtractor:
                 self._log_extraction_failure(text, response, "Retry also failed")
                 raise ValueError("Retry extraction also invalid")
                 
-        except Exception as e:
+        except (TimeoutError, Exception) as e:
             logger.error(f"Both extraction attempts failed: {e}")
             self._log_extraction_failure(text, "", f"Complete failure: {e}")
             return self._rule_based_extraction(text)
@@ -251,6 +285,54 @@ Response (JSON only):"""
             temperature=0.1   # Low temperature for factual extraction
         )[0]['generated_text']
         return response.strip()
+    
+    def _generate_llm_response_with_timeout(self, prompt: str) -> str:
+        """
+        Generate LLM response with timeout protection
+        
+        Args:
+            prompt: Formatted prompt
+            
+        Returns:
+            Generated response text
+            
+        Raises:
+            TimeoutError: If generation exceeds timeout
+        """
+        try:
+            # Use signal-based timeout (Unix-like systems)
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(LLM_TIMEOUT_SECONDS)
+            try:
+                response = self._generate_llm_response(prompt)
+            finally:
+                signal.alarm(0)
+            return response
+        except AttributeError:
+            # Windows doesn't support SIGALRM, use threading timeout
+            import threading
+            result = [None]
+            exception = [None]
+            
+            def target():
+                try:
+                    result[0] = self._generate_llm_response(prompt)
+                except Exception as e:
+                    exception[0] = e
+            
+            thread = threading.Thread(target=target)
+            thread.daemon = True
+            thread.start()
+            thread.join(timeout=LLM_TIMEOUT_SECONDS)
+            
+            if thread.is_alive():
+                logger.error("LLM inference timeout")
+                raise TimeoutError("LLM inference exceeded timeout")
+            
+            if exception[0]:
+                raise exception[0]
+            
+            return result[0]
     
     def _is_valid_extraction(self, extracted: Dict[str, str]) -> bool:
         """
@@ -510,7 +592,7 @@ Response (JSON only):"""
 
     def batch_extract(self, texts: List[str]) -> List[Dict[str, str]]:
         """
-        Extract failure information from multiple texts
+        Extract failure information from multiple texts with size limit
 
         Args:
             texts: List of input texts
@@ -518,14 +600,24 @@ Response (JSON only):"""
         Returns:
             List of extracted information dictionaries
         """
+        # Enforce batch size limit
+        if len(texts) > MAX_BATCH_SIZE:
+            logger.warning(f"Batch size {len(texts)} exceeds limit {MAX_BATCH_SIZE}. Truncating.")
+            texts = texts[:MAX_BATCH_SIZE]
+        
         logger.info(f"Batch extracting from {len(texts)} texts")
 
         results = []
 
         # Use tqdm for progress bar
         for text in tqdm(texts, desc="Extracting FMEA information", unit="text"):
-            extracted = self.extract_failure_info(text)
-            results.append(extracted)
+            try:
+                extracted = self.extract_failure_info(text)
+                results.append(extracted)
+            except Exception as e:
+                logger.error(f"Failed to extract from text: {e}")
+                # Add fallback result to maintain list consistency
+                results.append(self._rule_based_extraction(text[:1000]))
 
         return results
 
