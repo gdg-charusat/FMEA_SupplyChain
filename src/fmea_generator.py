@@ -172,7 +172,7 @@ class FMEAGenerator:
         combined_fmea = self._deduplicate_failures(combined_fmea)
         
         # Re-sort by RPN
-        combined_fmea = combined_fmea.sort_values('rpn', ascending=False).reset_index(drop=True)
+        combined_fmea = combined_fmea.sort_values('Rpn', ascending=False).reset_index(drop=True)
         
         logger.info(f"Generated combined FMEA with {len(combined_fmea)} entries")
         
@@ -290,6 +290,8 @@ class FMEAGenerator:
         logger.info("Removing duplicate failure modes...")
         
         # Group by similar failure modes (simple text matching)
+        # Columns are already Title Case here — _format_output is called per-source
+        # inside generate_from_text/generate_from_structured before reaching this point
         fmea_df['failure_mode_lower'] = fmea_df['Failure Mode'].str.lower().str.strip()
         
         # Keep the entry with highest RPN for each similar failure
