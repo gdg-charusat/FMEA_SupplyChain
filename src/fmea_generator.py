@@ -13,6 +13,7 @@ from datetime import datetime
 from preprocessing import DataPreprocessor
 from llm_extractor import LLMExtractor
 from risk_scoring import RiskScoringEngine
+from fuzzy_matcher import cluster_and_merge
 
 logger = logging.getLogger(__name__)
 
@@ -284,28 +285,51 @@ class FMEAGenerator:
         Returns:
             Deduplicated DataFrame
         """
-        # Simple deduplication based on failure mode similarity
-        # In production, could use more sophisticated NLP similarity
-        
-        logger.info("Removing duplicate failure modes...")
-        
-        # Group by similar failure modes (simple text matching)
-        # Columns are already Title Case here — _format_output is called per-source
-        # inside generate_from_text/generate_from_structured before reaching this point
-        fmea_df['failure_mode_lower'] = fmea_df['Failure Mode'].str.lower().str.strip()
-        
-        # Keep the entry with highest RPN for each similar failure
-        deduplicated = fmea_df.sort_values('Rpn', ascending=False).drop_duplicates(
-            subset=['failure_mode_lower'], keep='first'
-        )
-        
-        deduplicated = deduplicated.drop(columns=['failure_mode_lower'])
-        
-        removed_count = len(fmea_df) - len(deduplicated)
+        logger.info("Removing duplicate failure modes (fuzzy matching)...")
+
+        # Read threshold from config (default to 0.85)
+        threshold = self.config.get('text_processing', {}).get('fuzzy_match_threshold', 0.85)
+
+        # Use fuzzy matcher to cluster and merge similar failure modes
+        try:
+            merged = cluster_and_merge(fmea_df, threshold=threshold)
+        except Exception as e:
+            logger.error(f"Fuzzy clustering failed: {e}")
+            return fmea_df
+
+        # Recalculate RPN and action priority based on aggregated scores
+        if 'Severity' in merged.columns and 'Occurrence' in merged.columns and 'Detection' in merged.columns:
+            merged['Rpn'] = merged.apply(
+                lambda row: self.scorer.calculate_rpn(row['Severity'], row['Occurrence'], row['Detection']), axis=1
+            )
+            merged['Action Priority'] = merged.apply(
+                lambda row: self.scorer.calculate_action_priority(row['Severity'], row['Occurrence'], row['Detection']), axis=1
+            )
+
+        # Re-generate recommended actions (generator expects lower-case keys)
+        temp = merged.copy()
+        rename_map = {}
+        for col in ['Severity', 'Occurrence', 'Detection', 'Action Priority']:
+            if col in temp.columns:
+                rename_map[col] = col.lower().replace(' ', '_').strip()
+
+        temp = temp.rename(columns=rename_map)
+
+        temp = self._generate_recommendations(temp)
+
+        # Copy back recommended action if present
+        if 'recommended_action' in temp.columns:
+            merged['Recommended Action'] = temp['recommended_action'].values
+
+        # Ensure Rpn sort and reset index
+        if 'Rpn' in merged.columns:
+            merged = merged.sort_values('Rpn', ascending=False).reset_index(drop=True)
+
+        removed_count = len(fmea_df) - len(merged)
         if removed_count > 0:
-            logger.info(f"Removed {removed_count} duplicate entries")
-        
-        return deduplicated
+            logger.info(f"Removed {removed_count} duplicate entries after fuzzy merge")
+
+        return merged
     
     def export_fmea(self, fmea_df: pd.DataFrame, output_path: str, 
                    format: str = 'excel'):

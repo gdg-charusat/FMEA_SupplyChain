@@ -53,6 +53,7 @@ text_processing:
   negative_threshold: 0.3  # Reviews with polarity < this are considered negative
   max_reviews_per_batch: 100
   enable_sentiment_filter: true
+  fuzzy_match_threshold: 0.85  # Threshold for semantic deduplication (0-1)
 
 # Input Validation
 input_validation:
