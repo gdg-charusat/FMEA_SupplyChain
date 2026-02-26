@@ -24,7 +24,7 @@ print("\n🚀 Calling solve_mitigation_plan(alert_json_list=jfk_alerts)...")
 
 result1 = solve_mitigation_plan(
     alert_json_list=jfk_alerts,
-    csv_path="Dataset_AI_Supply_Optimization.csv"
+    csv_file_path="Dataset_AI_Supply_Optimization.csv"
 )
 
 if result1['status'] == 'success':
@@ -53,7 +53,7 @@ print("\n🚀 Calling solve_mitigation_plan(alert_json_list=boston_alerts)...")
 
 result2 = solve_mitigation_plan(
     alert_json_list=boston_alerts,
-    csv_path="Dataset_AI_Supply_Optimization.csv"
+    csv_file_path="Dataset_AI_Supply_Optimization.csv"
 )
 
 if result2['status'] == 'success':
@@ -84,7 +84,7 @@ print("\n🚀 Calling solve_mitigation_plan(alert_json_list=multi_alerts)...")
 
 result3 = solve_mitigation_plan(
     alert_json_list=multi_alerts,
-    csv_path="Dataset_AI_Supply_Optimization.csv"
+    csv_file_path="Dataset_AI_Supply_Optimization.csv"
 )
 
 if result3['status'] == 'success':

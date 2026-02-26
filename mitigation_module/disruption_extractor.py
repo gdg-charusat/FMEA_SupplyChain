@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, validator
 import pandas as pd
 
+logger = logging.getLogger(__name__)
 # OCR imports (using existing FMEA OCR setup)
 try:
     import easyocr
@@ -19,7 +20,6 @@ except ImportError:
     OCR_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
-
 
 class DisruptionEvent(BaseModel):
     """

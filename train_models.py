@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Train sentiment and part extraction models"""
-    
+
     print("\n" + "=" * 70)
     print("  FMEA MODEL TRAINING PIPELINE")
     print("=" * 70)
@@ -23,10 +23,10 @@ def main():
     print("1. Sentiment Classification: GPT-3 Curie (Target: 97% accuracy)")
     print("2. Part Extraction: GPT-3.5 Turbo (Target: 98-99% accuracy)")
     print("")
-    
+
     # Get OpenAI API key
     api_key = input("Enter your OpenAI API Key (or press Enter to skip GPT training): ").strip()
-    
+
     if not api_key:
         print("\n[!] No API key provided. Will use fallback methods:")
         print("    - BiLSTM-CNN for sentiment (87% accuracy)")
@@ -37,9 +37,9 @@ def main():
             print("Training cancelled.")
             return
         api_key = None
-    
+
     # Initialize trainer
-    trainer = FMEAModelTrainer(api_key)
+    trainer = FMEAModelTrainer(api_key, config={})
     preprocessor = DataPreprocessor()
     
     # Load your car review data
@@ -49,7 +49,7 @@ def main():
     all_reviews = []
     for file in review_files:
         print(f"   Loading {file.name}...")
-        df = preprocessor.load_unstructured_data(str(file), is_file=True)
+        df = preprocessor.load_unstructured_data(str(file), file=True)
         all_reviews.append(df)
     
     reviews_df = pd.concat(all_reviews, ignore_index=True)

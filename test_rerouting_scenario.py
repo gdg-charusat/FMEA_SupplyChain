@@ -35,9 +35,9 @@ print("📊 Impact Report")
 print("=" * 70 + "\n")
 
 impact_table = generate_impact_report(
-    original_flows=baseline['flows'],
-    new_flows=adjusted['flows'],
-    route_map_data=ROUTE_MAP
+    baseline['flows'],
+    adjusted['flows'],
+    ROUTE_MAP
 )
 
 print(impact_table.to_string(index=False))

@@ -155,10 +155,10 @@ immediately to the secondary warehouse.
     
     # Also generate the narrative report
     summary_text, impact_table, cost_delta_pct = generate_impact_report(
-        initial_solution=baseline,
-        new_solution=adjusted,
-        route_map=ROUTE_MAP,
-        disruptions=disruptions
+        baseline,
+        adjusted,
+        ROUTE_MAP,
+        disruptions
     )
     
     print("🎯 STRATEGIC NARRATIVE:")
