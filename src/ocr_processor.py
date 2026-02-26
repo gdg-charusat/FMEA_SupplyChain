@@ -64,7 +64,12 @@ class OCRProcessor:
         if isinstance(source, (bytes, bytearray)):
             return bytes(source)
         if isinstance(source, (str, Path)):
-            return Path(source).read_bytes()
+            path = Path(source)
+            if path.is_absolute():
+                raise ValueError("Absolute paths are not allowed for security reasons.")
+            if ".." in path.parts:
+                raise ValueError("Path traversal ('..') is not allowed.")
+            return path.read_bytes()
         if hasattr(source, "read"):
             data = source.read()
             if isinstance(data, str):
