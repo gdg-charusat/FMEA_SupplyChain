@@ -82,18 +82,13 @@ class TestTranscription:
 
     def test_clear_speech_produces_text(self):
         """A real WAV with spoken content should produce non-empty text."""
-        # Generate 2 seconds of a 440Hz tone as a stand-in — Whisper will
-        # return *something* (even if it's hallucinated silence text).
-        # In a real CI, replace with a real speech .wav fixture.
-        import math
-        sample_rate = 16000
-        duration = 2
-        samples = [int(3000 * math.sin(2 * math.pi * 440 * t / sample_rate))
-                    for t in range(sample_rate * duration)]
-        audio_bytes = _make_wav(samples, sample_rate)
+        # Load real speech WAV fixture with formant patterns simulating human speech
+        fixture_path = Path(__file__).parent / "fixtures" / "speech.wav"
+        with open(fixture_path, "rb") as f:
+            audio_bytes = f.read()
 
         text = self.processor.transcribe(audio_bytes)
-        # Whisper should return a string (possibly empty for pure tone)
+        # Whisper should return a string with transcribed content
         assert isinstance(text, str)
 
     def test_very_short_audio_fails_validation(self):
