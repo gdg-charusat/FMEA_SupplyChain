@@ -27,7 +27,6 @@ try:
 except ImportError:
     OCR_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
 
 class DisruptionEvent(BaseModel):
     """
