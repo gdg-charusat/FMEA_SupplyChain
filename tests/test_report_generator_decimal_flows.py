@@ -21,7 +21,7 @@ from mitigation_module.report_generator import (
 # Test fixtures
 SIMPLE_ROUTE_MAP = {
     1: ("Warehouse_A", "Client_NYC"),
-   2: ("Warehouse_B", "Client_NYC"),
+    2: ("Warehouse_B", "Client_NYC"),
     3: ("Warehouse_A", "Client_LA"),
     4: ("Warehouse_B", "Client_LA"),
 }

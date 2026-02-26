@@ -7,13 +7,9 @@ import sys
 from pathlib import Path
 
 # Add project root to path
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
-from mitigation_module.report_generator import (
-    generate_impact_report,
-    _determine_status,
-    _format_quantity
-)
+import mitigation_module.report_generator as rg
 
 
 def demonstrate_decimal_quantity_fix():
@@ -56,7 +52,7 @@ def demonstrate_decimal_quantity_fix():
         dest = route_map[route_id][1]
         print(f"  Route {route_id} ({dest}): {qty} units")
     
-    summary_text, impact_table, cost_delta = generate_impact_report(
+    summary_text, impact_table, cost_delta = rg.generate_impact_report(
         initial_solution_1,
         new_solution_1,
         route_map,
@@ -149,7 +145,7 @@ def demonstrate_decimal_quantity_fix():
     
     print("\nStatus Tests:")
     for old_qty, new_qty, expected_status, description in test_cases:
-        actual_status = _determine_status(old_qty, new_qty)
+        actual_status = rg._determine_status(old_qty, new_qty)
         passed = actual_status == expected_status
         status = "✓ PASS" if passed else "✗ FAIL"
         print(f"  {status}: {description}")
@@ -170,7 +166,7 @@ def demonstrate_decimal_quantity_fix():
     
     print("\nFormatting Tests:")
     for value, expected, description in format_tests:
-        actual = _format_quantity(value)
+        actual = rg._format_quantity(value)
         passed = actual == expected
         status = "✓ PASS" if passed else "✗ FAIL"
         print(f"  {status}: {description}")
