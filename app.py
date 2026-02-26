@@ -504,10 +504,11 @@ def main():
         """)
     
     # Main content area
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📝 Generate FMEA", 
         "🎯 PFMEA Generator", 
         "🚚 Supply Chain Risk",
+        "🔄 Model Comparison",
         "📊 Analytics", 
         "ℹ️ Help"
     ])
@@ -1483,7 +1484,293 @@ def main():
             st.error(f"Mitigation module not available: {e}")
             st.info("Make sure mitigation_module is properly installed")
     
+    
     with tab4:
+        st.markdown('<div class="sub-header">🔄 Multi-Model Comparison Mode</div>', unsafe_allow_html=True)
+        st.markdown("Compare FMEA outputs from multiple LLMs side-by-side")
+        
+        # Import comparison module
+        from multi_model_comparison import MultiModelComparator, ComparisonVisualizationHelper
+        
+        st.markdown("### 🎯 Model Selection & Input")
+        
+        # Model selection
+        available_models = [
+            "mistralai/Mistral-7B-Instruct-v0.2",
+            "meta-llama/Llama-2-7b-chat-hf",
+            "gpt2",
+            "Rule-based (No LLM)"
+        ]
+        
+        selected_models = st.multiselect(
+            "Select 2 or more models for comparison:",
+            options=available_models,
+            default=["Rule-based (No LLM)", "gpt2"],
+            help="Choose at least 2 models to enable comparison. Hold Ctrl/Cmd to select multiple."
+        )
+        
+        # Input method
+        comparison_input_type = st.radio(
+            "Input Type:",
+            ["Text Input", "Structured File (CSV/Excel)"]
+        )
+        
+        comparison_input_data = None
+        
+        if comparison_input_type == "Text Input":
+            comparison_text = st.text_area(
+                "Enter text for comparison:",
+                height=150,
+                placeholder="Paste customer reviews, failure reports, or complaint text...",
+                help="This text will be analyzed by all selected models"
+            )
+            comparison_input_data = comparison_text
+        else:
+            comparison_file = st.file_uploader(
+                "Upload CSV or Excel file",
+                type=['csv', 'xlsx', 'xls'],
+                key='comparison_file'
+            )
+            if comparison_file:
+                comparison_input_data = comparison_file
+        
+        # Generate comparison
+        if selected_models and len(selected_models) >= 2 and comparison_input_data and st.button("🚀 Generate Multi-Model Comparison", type="primary", use_container_width=True):
+            if len(selected_models) < 2:
+                st.error("Please select at least 2 models for comparison")
+            else:
+                with st.spinner("Generating FMEA from multiple models..."):
+                    try:
+                        generator = initialize_generator(config)
+                        
+                        # Prepare input
+                        if comparison_input_type == "Text Input":
+                            # Split text into meaningful chunks (by paragraphs or sentences)
+                            # This allows models to extract multiple failure modes
+                            text_chunks = []
+                            # Split by double newline (paragraphs)
+                            paragraphs = [p.strip() for p in comparison_text.split('\n\n') if p.strip()]
+                            
+                            if len(paragraphs) > 1:
+                                # Multiple paragraphs - use them as chunks
+                                text_chunks = paragraphs
+                            else:
+                                # Single paragraph - split by single newline or periods
+                                sentences = [s.strip() for s in comparison_text.replace('\n', '. ').split('. ') if s.strip() and len(s.strip()) > 20]
+                                
+                                # Group sentences into chunks of 2-3 sentences each
+                                chunk_size = 3
+                                for i in range(0, len(sentences), chunk_size):
+                                    chunk = '. '.join(sentences[i:i+chunk_size])
+                                    if chunk:
+                                        text_chunks.append(chunk)
+                            
+                            # If we ended up with no chunks, use the whole text
+                            if not text_chunks:
+                                text_chunks = [comparison_text]
+                            
+                            comparison_results = generator.generate_multi_model_comparison(
+                                text_input=text_chunks,
+                                model_names=selected_models,
+                                is_file=False
+                            )
+                        else:
+                            # Save file temporarily
+                            temp_path = Path(f"temp_comparison_{comparison_file.name}")
+                            with open(temp_path, "wb") as f:
+                                f.write(comparison_file.getbuffer())
+                            
+                            comparison_results = generator.generate_multi_model_from_structured(
+                                file_path=str(temp_path),
+                                model_names=selected_models
+                            )
+                            
+                            temp_path.unlink()
+                        
+                        # Store results in session state
+                        st.session_state['comparison_results'] = comparison_results
+                        
+                        # Show summary of generated results
+                        num_failure_modes = len(comparison_results['comparison_results']['comparison_df'])
+                        st.success(f"✅ Multi-model comparison completed! Generated {num_failure_modes} failure modes for comparison.")
+                        
+                        # Debug: Show individual model results
+                        with st.expander("🔍 Debug: Individual Model Results"):
+                            for model_name, model_df in comparison_results['individual_results'].items():
+                                st.write(f"**{model_name}**: {len(model_df)} failure modes")
+                                if len(model_df) > 0:
+                                    st.dataframe(model_df.head())
+                        
+                    except ValueError as e:
+                        st.error(f"Input validation error: {e}")
+                    except Exception as e:
+                        st.error(f"Error during comparison: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+        
+        # Display comparison table
+        if 'comparison_results' in st.session_state:
+            st.markdown("---")
+            st.markdown("### 📋 Side-by-Side Comparison")
+            
+            results = st.session_state['comparison_results']
+            comparison_df = results['comparison_results']['comparison_df']
+            disagreement_matrix = results['comparison_results']['disagreement_matrix']
+            individual_results = results['individual_results']
+            model_names = results['comparison_results']['model_names']
+            
+            # Debug info
+            st.info(f"📊 Comparison DataFrame has {len(comparison_df)} rows")
+            
+            if not comparison_df.empty:
+                # Create comparison display
+                comparison_display = []
+                
+                for idx, row in comparison_df.iterrows():
+                    disagreement = disagreement_matrix.get(idx, {})
+                    
+                    # Determine disagreement visual
+                    has_disagreement = disagreement.get('has_any_disagreement', False)
+                    disagreement_level = 3 if has_disagreement else 0
+                    
+                    display_row = {
+                        'Disagreement': '🔴' if disagreement_level > 0 else '🟢',
+                        'Failure Mode': row['failure_mode'],
+                        'Effect': row['effect']
+                    }
+                    
+                    # Add model scores
+                    for model in model_names:
+                        s_col = f'{model}_severity'
+                        o_col = f'{model}_occurrence'
+                        d_col = f'{model}_detection'
+                        r_col = f'{model}_rpn'
+                        
+                        if s_col in comparison_df.columns and pd.notna(row[s_col]):
+                            display_row[f'{model} S|O|D|RPN'] = f"{int(row[s_col])}|{int(row[o_col])}|{int(row[d_col])}|{int(row[r_col])}"
+                        else:
+                            display_row[f'{model} S|O|D|RPN'] = "N/A"
+                    
+                    comparison_display.append(display_row)
+                
+                comparison_display_df = pd.DataFrame(comparison_display)
+                
+                if len(comparison_display_df) > 0:
+                    st.dataframe(comparison_display_df, use_container_width=True, height=400)
+                else:
+                    st.warning("⚠️ Comparison display is empty")
+                
+                # Show detailed comparison for high disagreement cases
+                high_disagreement = results['comparison_results']['high_disagreement_cases']
+                
+                if high_disagreement:
+                    st.markdown("---")
+                    st.markdown("### 🔴 High Disagreement Cases")
+                    st.markdown("Failure modes where models significantly differ in their assessments:")
+                    
+                    for i, case in enumerate(high_disagreement[:5], 1):  # Show top 5
+                        with st.expander(f"**Case {i}: {case['failure_mode']}** (S-range: {case['severity_range']}, RPN-range: {case['rpn_range']})"):
+                            st.markdown(f"**Failure Mode:** {case['failure_mode']}")
+                            st.markdown(f"**Effect:** {case['effect']}")
+                            st.markdown(f"**Disagreement Categories:** {', '.join(case['disagreement_categories'])}")
+                            
+                            # Show individual model scores
+                            scores_data = []
+                            for model in model_names:
+                                if f'{model}_severity' in comparison_df.columns:
+                                    model_idx = comparison_df[comparison_df['failure_mode'] == case['failure_mode']].index[0]
+                                    model_row = comparison_df.loc[model_idx]
+                                    
+                                    # Check if model has values (not NaN)
+                                    if pd.notna(model_row[f'{model}_severity']):
+                                        scores_data.append({
+                                            'Model': model,
+                                            'Severity': int(model_row[f'{model}_severity']),
+                                            'Occurrence': int(model_row[f'{model}_occurrence']),
+                                            'Detection': int(model_row[f'{model}_detection']),
+                                            'RPN': int(model_row[f'{model}_rpn']),
+                                            'Priority': model_row[f'{model}_priority']
+                                        })
+                                    else:
+                                        scores_data.append({
+                                            'Model': model,
+                                            'Severity': 'N/A',
+                                            'Occurrence': 'N/A',
+                                            'Detection': 'N/A',
+                                            'RPN': 'N/A',
+                                            'Priority': 'N/A'
+                                        })
+                            
+                            if scores_data:
+                                scores_df = pd.DataFrame(scores_data)
+                                st.dataframe(scores_df, use_container_width=True, hide_index=True)
+            else:
+                st.warning("⚠️ No comparison data available. The models may not have produced comparable failure modes from the input text.")
+                st.info("💡 Tip: Try providing more detailed text about specific failure scenarios, or try different model combinations.")
+                
+                # Still show individual results if available
+                if individual_results:
+                    st.markdown("### 📦 Individual Model Results")
+                    for model_name, model_df in individual_results.items():
+                        with st.expander(f"**{model_name}**: {len(model_df)} failure modes"):
+                            st.dataframe(model_df, use_container_width=True)
+            
+            # Display comparative summary (only if comparison_df is not empty)
+            if not comparison_df.empty:
+                st.markdown("---")
+                st.markdown("### 💡 Comparative Summary Insights")
+                
+                summary = results['comparison_results']['summary']
+                
+                if summary.get('key_insights'):
+                    for insight in summary['key_insights']:
+                        st.info(insight)
+                
+                # Model characteristics
+                st.markdown("#### 🎯 Model Characteristics")
+                
+                col_char1, col_char2 = st.columns(2)
+                
+                with col_char1:
+                    if summary.get('high_severity_model'):
+                        st.markdown(f"**Assigns Higher Severity:** {summary['high_severity_model']}")
+                    if summary.get('conservative_severity_model'):
+                        st.markdown(f"**More Conservative Severity:** {summary['conservative_severity_model']}")
+                
+                with col_char2:
+                    if summary.get('optimistic_detection_model'):
+                        st.markdown(f"**Optimistic Detection:** {summary['optimistic_detection_model']}")
+                    if summary.get('conservative_detection_model'):
+                        st.markdown(f"**Conservative Detection:** {summary['conservative_detection_model']}")
+                
+                # Export comparison results
+                st.markdown("---")
+                st.markdown("### 💾 Export Comparison Results")
+                
+                # Export comparison summary
+                csv_comparison = comparison_display_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Comparison Table (CSV)",
+                    data=csv_comparison,
+                    file_name=f"model_comparison_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+                
+                # Export individual results
+                with st.expander("📦 Export Individual Model Results"):
+                    for model_name, model_fmea in individual_results.items():
+                        csv_data = model_fmea.to_csv(index=False)
+                        st.download_button(
+                            label=f"📥 {model_name}",
+                            data=csv_data,
+                            file_name=f"fmea_{model_name.replace('/', '_')}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            key=f"download_{model_name}"
+                        )
+        else:
+            st.info("👆 Select models, input data, and click 'Generate Multi-Model Comparison' to see results")
+    
+    with tab5:
         st.markdown('<div class="sub-header">Analytics & Visualization</div>', unsafe_allow_html=True)
         
         if 'fmea_df' in st.session_state:
@@ -1559,7 +1846,7 @@ def main():
         else:
             st.info("Generate an FMEA first to see analytics.")
     
-    with tab5:
+    with tab6:
         st.markdown('<div class="sub-header">Help & Documentation</div>', unsafe_allow_html=True)
         
         st.markdown("""
