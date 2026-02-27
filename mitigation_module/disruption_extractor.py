@@ -11,6 +11,14 @@ from pathlib import Path
 from pydantic import BaseModel, Field, validator
 import pandas as pd
 
+# Import dynamic route lookup for non-hardcoded cities
+try:
+    from .dynamic_network import get_routes_for_city
+    DYNAMIC_ROUTING_AVAILABLE = True
+except ImportError:
+    DYNAMIC_ROUTING_AVAILABLE = False
+    logger.warning("Dynamic routing not available. Will use mapping config only.")
+
 # OCR imports (using existing FMEA OCR setup)
 try:
     import easyocr
@@ -182,20 +190,35 @@ class DisruptionExtractor:
                 numbers = re.findall(r'\d+', match.group(2))
                 affected_routes.extend([int(n) for n in numbers])
         
-        # STEP 2: If no route numbers found, try location-based extraction
+        # STEP 2: If no route numbers found, try location-based extraction from mapping config
         if not affected_routes:
-            location_to_routes = {
-                'boston': [1, 4],
-                'new york': [2, 7],
-                'chicago': [3, 6],
-                'philadelphia': [5, 8]
-            }
+            # Use the loaded mapping config (supports many more locations)
+            mappings = self.mapping_config.get('mappings', {}).get('locations', {})
             
-            for location, routes in location_to_routes.items():
-                if location in text_lower:
+            # Try all mappings (case-insensitive)
+            for location, routes in mappings.items():
+                if location.lower() in text_lower:
                     affected_routes.extend(routes)
                     print(f"[EXTRACTOR] No explicit routes found, mapped '{location}' to routes {routes}")
                     break
+            
+            # STEP 2b: If still no match and dynamic routing is available, try dynamic lookup
+            if not affected_routes and DYNAMIC_ROUTING_AVAILABLE:
+                # Extract potential city names (capitalized words that might be cities)
+                import re
+                potential_cities = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b', text)
+                
+                for city in potential_cities:
+                    try:
+                        # Attempt dynamic route resolution
+                        dynamic_routes = get_routes_for_city(city, include_multihop=False)
+                        if dynamic_routes:
+                            affected_routes.extend(dynamic_routes[:2])  # Use first 2 routes
+                            print(f"[EXTRACTOR] Dynamically resolved '{city}' to routes {dynamic_routes[:2]}")
+                            break
+                    except Exception as e:
+                        # Continue trying other potential cities
+                        continue
         
         # STEP 3: If still no routes, extract from specific number patterns
         if not affected_routes:
@@ -239,15 +262,20 @@ class DisruptionExtractor:
             cost_multiplier = float(multiplier_match.group(1))
             print(f"[EXTRACTOR] Found explicit multiplier in text: {cost_multiplier}x")
         
-        # ERROR if no routes could be extracted
+        # GRACEFUL FALLBACK if no routes could be extracted
         if not affected_routes:
-            error_msg = (
-                f"ERROR: Could not extract any route information from: '{text[:100]}...'\n"
-                f"Please specify route numbers explicitly (e.g., 'Route 3', 'routes 5 and 7')\n"
-                f"Or mention a location: Boston, New York, Chicago, Philadelphia"
+            warning_msg = (
+                f"WARNING: Could not extract route information from: '{text[:100]}...'\n"
+                f"No explicit route numbers found and location not recognized.\n"
+                f"Returning empty disruption list. To fix:\n"
+                f"  1. Specify route numbers explicitly (e.g., 'Route 3', 'routes 5 and 7'), OR\n"
+                f"  2. Add location to mapping_config.json, OR\n"
+                f"  3. Mention a recognized location (check mapping_config.json for available locations)"
             )
-            print(f"[EXTRACTOR] {error_msg}")
-            raise ValueError(error_msg)
+            print(f"[EXTRACTOR] {warning_msg}")
+            logger.warning(warning_msg)
+            # Return empty list instead of raising error
+            return []
         
         print(f"[EXTRACTOR] ✓ Extracted Routes: {affected_routes}")
         print(f"[EXTRACTOR] ✓ Impact Type: {impact_type}")
