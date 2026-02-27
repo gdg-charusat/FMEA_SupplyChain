@@ -46,12 +46,18 @@ class LLMExtractor:
 
     def _load_model(self):
         """Load the LLM model and tokenizer"""
-        model_name = self.model_config.get("name", "mistralai/Mistral-7B-Instruct-v0.2")
+
+        model_name = self.model_config.get("name")
+
+        # If CLI disabled model or config explicitly sets it to None
+        if not model_name:
+            logger.info("No model specified. Using rule-based extraction.")
+            self.pipeline = None
+            return
 
         logger.info(f"Loading model: {model_name}")
 
         try:
-            # Configure quantization for memory efficiency
             quantization_config = None
             if self.model_config.get("quantization", True):
                 quantization_config = BitsAndBytesConfig(
@@ -61,7 +67,6 @@ class LLMExtractor:
                     bnb_4bit_use_double_quant=True,
                 )
 
-            # Load tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name, trust_remote_code=True
             )
@@ -69,22 +74,17 @@ class LLMExtractor:
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
 
-            # Determine device
             device_config = self.model_config.get("device", "auto")
 
-            # Set device_map and actual device for model loading
             device_map = None
             actual_device = device_config
 
             if device_config == "auto":
-                # Use automatic device mapping for efficient GPU utilization
                 device_map = "auto"
                 actual_device = "cuda" if torch.cuda.is_available() else "cpu"
             else:
-                # Explicit device set by user (e.g., 'cpu' or 'cuda')
                 actual_device = device_config
 
-            # Load model
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 quantization_config=quantization_config,
@@ -93,11 +93,9 @@ class LLMExtractor:
                 torch_dtype=torch.float16 if actual_device != "cpu" else torch.float32,
             )
 
-            # Manually move to device only if device_map was not used
             if device_map is None and actual_device in ["cpu", "cuda"]:
                 self.model = self.model.to(actual_device)
 
-            # Create pipeline
             self.pipeline = pipeline(
                 "text-generation",
                 model=self.model,
