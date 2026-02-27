@@ -98,8 +98,17 @@ def load_config():
     """Load configuration from YAML file"""
     config_path = Path('config/config.yaml')
     if config_path.exists():
-        with open(config_path, 'r') as f:
-            return yaml.safe_load(f)
+        try:
+            with open(config_path, 'r') as f:
+                return yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            st.error(f"Error parsing configuration file: {e}")
+            logger.error(f"YAML parsing error: {e}")
+            return {}
+        except Exception as e:
+            st.error(f"Error reading configuration file: {e}")
+            logger.error(f"Error reading config: {e}")
+            return {}
     else:
         st.error("Configuration file not found!")
         return {}
@@ -378,7 +387,10 @@ def main():
     MAX_FILE_SIZE_MB = 200
     MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
     ALLOWED_IMAGE_TYPES = ['png', 'jpg', 'jpeg']
+<<<<<<< ocrSpecificMessage
     ALLOWED_TEXT_TYPES = ['txt', 'doc', 'docx', 'pdf']
+=======
+>>>>>>> main
     ALLOWED_STRUCTURED_TYPES = ['csv', 'xlsx', 'xls']
     ALLOWED_OCR_TYPES = ['jpg', 'jpeg', 'png', 'pdf']
 
@@ -417,18 +429,37 @@ def main():
             
             if text_input_method == "Upload File":
                 uploaded_file = st.file_uploader(
+<<<<<<< ocrSpecificMessage
                     "Upload a text document (TXT, DOC, DOCX, PDF)",
                     type=['txt', 'doc', 'docx', 'pdf'],
                     help=f"Supported formats: TXT, DOC, DOCX, PDF. Max size: {MAX_FILE_SIZE_MB} MB."
+=======
+                    "Upload image file (PNG, JPEG) - OCR will extract text",
+                    type=['png', 'jpg', 'jpeg'],
+                    help=f"Supported formats: PNG, JPG, JPEG. Max size: {MAX_FILE_SIZE_MB} MB."
+>>>>>>> main
                 )
                 
                 if uploaded_file:
                     # Validate uploaded file
+<<<<<<< ocrSpecificMessage
                     is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_TEXT_TYPES)
                     if not is_valid:
                         st.error(error_msg)
                         st.stop()
+=======
+                    is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_IMAGE_TYPES)
+                    if not is_valid:
+                        st.error(error_msg)
+                        st.stop()
                     
+                    show_file_info(uploaded_file)
+
+                    # Display uploaded image
+                    col1, col2 = st.columns([1, 2])
+>>>>>>> main
+                    
+
                     show_file_info(uploaded_file)
 
                     if st.button("🚀 Read File & Generate FMEA", type="primary"):
@@ -449,6 +480,39 @@ def main():
                                     extracted_text = "\n".join(
                                         para.text for para in doc.paragraphs
                                     )
+                    with col1:
+                        st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+                    
+                    with col2:
+                        if st.button("🚀 Extract Text & Generate FMEA", type="primary"):
+                            with st.spinner("Extracting text from image..."):
+                                # Extract text using OCR
+                                extracted_text = extract_text_from_image(uploaded_file)
+                                
+                                # Show extracted text
+                                st.markdown("**Extracted Text:**")
+                                st.text_area("", extracted_text, height=150, key="extracted", disabled=True)
+                                
+                                # Validate OCR output
+                                if not extracted_text or not extracted_text.strip():
+                                    st.error("⚠️ OCR failed to extract any readable text from the image. Please upload a clearer image.")
+                                    st.stop()
+                                elif "Error" in extracted_text or "No text found" in extracted_text:
+                                    st.error(extracted_text)
+                                    st.stop()
+                                else:
+                                    with st.spinner("Generating FMEA from extracted text..."):
+                                        generator = initialize_generator(config)
+                                        # Split text into lines
+                                        texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
+                                        if not texts:
+                                            st.error("⚠️ OCR extracted text contains no usable content. Please try a different image.")
+                                            st.stop()
+                                        fmea_df = generator.generate_from_text(texts, is_file=False)
+                                        st.session_state['fmea_df'] = fmea_df
+                else:
+                    st.info("📤 Please upload an image file (PNG, JPG, JPEG) to begin.")
+                                        st.session_state['fmea_saved'] = False
                                 else:
                                     extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
                             except Exception as e:
@@ -493,6 +557,7 @@ def main():
                         generator = initialize_generator(config)
                         fmea_df = generator.generate_from_text(texts, is_file=False)
                         st.session_state['fmea_df'] = fmea_df
+                        st.session_state['fmea_saved'] = False
 
         elif input_type == "📷 Scan Document (OCR)":
             st.markdown("**Upload an image or PDF for OCR extraction:**")
@@ -566,8 +631,13 @@ def main():
                             generator = initialize_generator(config)
                             fmea_df = generator.generate_from_text(texts, is_file=False)
                             st.session_state['fmea_df'] = fmea_df
+<<<<<<< ocrSpecificMessage
+=======
+
+>>>>>>> main
             else:
                 st.info("📤 Please upload an image or PDF document for OCR extraction.")
+                            st.session_state['fmea_saved'] = False
         
         elif input_type == "🎙️ Voice Input":
             st.markdown("**🎙️ Record your failure description:**")
@@ -666,6 +736,7 @@ def main():
                         generator = initialize_generator(config)
                         fmea_df = generator.generate_from_structured(str(temp_path))
                         st.session_state['fmea_df'] = fmea_df
+                        st.session_state['fmea_saved'] = False
                     
                     temp_path.unlink()
             else:
@@ -751,6 +822,7 @@ def main():
                         text_input=text_data if text_data else None
                     )
                     st.session_state['fmea_df'] = fmea_df
+                    st.session_state['fmea_saved'] = False
                     
                     # Cleanup
                     if structured_path:
@@ -760,10 +832,12 @@ def main():
         if 'fmea_df' in st.session_state:
             st.success("✅ FMEA Generated Successfully!")
             
-            # Auto-save the run
-            tracker = FMEAHistoryTracker("history")
-            run_id = tracker.save_run(st.session_state['fmea_df'], label=f"Run {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            st.caption(f"💾 Run saved (ID: {run_id})")
+            # Auto-save the run (only once per generation to avoid duplicate saves on rerun)
+            if not st.session_state.get('fmea_saved', False):
+                tracker = FMEAHistoryTracker("history")
+                run_id = tracker.save_run(st.session_state['fmea_df'], label=f"Run {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                st.caption(f"💾 Run saved (ID: {run_id})")
+                st.session_state['fmea_saved'] = True
             
             fmea_df = st.session_state['fmea_df']
             
@@ -956,6 +1030,7 @@ def main():
                             
                             # Store in session state for Analytics tab
                             st.session_state['fmea_df'] = combined_df
+                            st.session_state['fmea_saved'] = False
                             
                             st.success(f"✅ Generated {len(combined_df)} PFMEA record(s)")
                             

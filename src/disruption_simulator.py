@@ -189,10 +189,16 @@ class DisruptionSimulator:
         for col in (sev_col, occ_col, det_col):
             result_df[col] = pd.to_numeric(result_df[col], errors="coerce").fillna(5)
 
-        # RPN falls back to 0 so original_rpn is never NaN before delta computation
-        result_df[rpn_col] = pd.to_numeric(result_df[rpn_col], errors="coerce").fillna(0)
+        # Recompute original_rpn directly from the (now numeric-safe) base scores so
+        # that the Disruption_Delta_RPN is always consistent with S×O×D arithmetic.
+        # Using the stored rpn_col is wrong: NaN values there fall back to 0 while
+        # NaN S/O/D fall back to 5, producing wildly inflated deltas.
+        original_rpn = result_df[sev_col] * result_df[occ_col] * result_df[det_col]
 
-        original_rpn = result_df[rpn_col].copy()
+        # Keep the rpn_col numeric for downstream consumers
+        result_df[rpn_col] = pd.to_numeric(result_df[rpn_col], errors="coerce").fillna(
+            original_rpn
+        )
 
         level1_indices, level2_indices = self.get_downstream_components(
             result_df, failed_node
