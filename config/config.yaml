@@ -119,7 +119,6 @@ prompts:
     Existing Controls: {controls}
     
     Return only the numeric detection score (1-10).
-
 # Multi-Model Comparison Settings
 model_comparison:
   # RPN difference threshold for disagreement detection
@@ -140,4 +139,9 @@ model_comparison:
     - "meta-llama/Llama-2-7b-chat-hf"
     - "gpt2"
     - "Rule-based (No LLM)"
-
+# Voice Input Settings
+voice_input:
+  enabled: true
+  language: "en"
+  max_duration_seconds: 30
+  model_size: "base"

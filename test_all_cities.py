@@ -21,7 +21,7 @@ for city in ['Boston', 'Chicago', 'New York', 'Philadelphia']:
     # Show the actual changes
     for idx, row in report.iterrows():
         if 'STOPPED' in row['Status'] or 'ACTIVATED' in row['Status']:
-            print(f'    -> {row["Route Info"]}: {row["Status"]}')
+            print(f'    -> {row["Route Path"]}: {row["Status"]}')
 
 print('\n' + '='*70)
 print('RESULT: All cities now have rerouting options!')
