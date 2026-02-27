@@ -630,27 +630,6 @@ def main():
                                     extracted_text = "\n".join(
                                         para.text for para in doc.paragraphs
                                     )
-                    with col1:
-                        st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
-                    
-                    if st.button("🚀 Read File & Generate FMEA", type="primary"):
-                        with st.spinner("Reading text from file..."):
-                            file_name = uploaded_file.name.lower()
-                            try:
-                                if file_name.endswith('.txt'):
-                                    extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
-                                elif file_name.endswith('.pdf'):
-                                    import PyPDF2, io
-                                    reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.getvalue()))
-                                    extracted_text = "\n".join(
-                                        page.extract_text() or "" for page in reader.pages
-                                    )
-                                elif file_name.endswith(('.doc', '.docx')):
-                                    import docx, io
-                                    doc = docx.Document(io.BytesIO(uploaded_file.getvalue()))
-                                    extracted_text = "\n".join(
-                                        para.text for para in doc.paragraphs
-                                    )
                                 else:
                                     extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
                             except Exception as e:
@@ -852,6 +831,7 @@ def main():
                             generator = initialize_generator(config)
                             fmea_df = generator.generate_from_text(texts, is_file=False)
                             st.session_state['fmea_df'] = fmea_df
+                            st.session_state['fmea_saved'] = False
                 else:
                     st.error(f"⚠️ {validation['reason']}")
                     st.warning("Please record again with a clear, longer description.")
