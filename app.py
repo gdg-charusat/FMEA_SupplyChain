@@ -1612,76 +1612,125 @@ def main():
         if 'comparison_results' in st.session_state:
             st.markdown("---")
             st.markdown("### 📋 Side-by-Side Comparison")
-            
+
             results = st.session_state['comparison_results']
             comparison_df = results['comparison_results']['comparison_df']
             disagreement_matrix = results['comparison_results']['disagreement_matrix']
             individual_results = results['individual_results']
             model_names = results['comparison_results']['model_names']
-            
+
             # Debug info
             st.info(f"📊 Comparison DataFrame has {len(comparison_df)} rows")
-            
+
             if not comparison_df.empty:
+                import pandas as pd  # Ensure pd is available in this scope
                 # Create comparison display
                 comparison_display = []
-                
                 for idx, row in comparison_df.iterrows():
                     disagreement = disagreement_matrix.get(idx, {})
-                    
-                    # Determine disagreement visual
                     has_disagreement = disagreement.get('has_any_disagreement', False)
                     disagreement_level = 3 if has_disagreement else 0
-                    
                     display_row = {
                         'Disagreement': '🔴' if disagreement_level > 0 else '🟢',
                         'Failure Mode': row['failure_mode'],
                         'Effect': row['effect']
                     }
-                    
-                    # Add model scores
                     for model in model_names:
                         s_col = f'{model}_severity'
                         o_col = f'{model}_occurrence'
                         d_col = f'{model}_detection'
                         r_col = f'{model}_rpn'
-                        
                         if s_col in comparison_df.columns and pd.notna(row[s_col]):
                             display_row[f'{model} S|O|D|RPN'] = f"{int(row[s_col])}|{int(row[o_col])}|{int(row[d_col])}|{int(row[r_col])}"
                         else:
                             display_row[f'{model} S|O|D|RPN'] = "N/A"
-                    
                     comparison_display.append(display_row)
-                
                 comparison_display_df = pd.DataFrame(comparison_display)
-                
                 if len(comparison_display_df) > 0:
                     st.dataframe(comparison_display_df, use_container_width=True, height=400)
                 else:
                     st.warning("⚠️ Comparison display is empty")
-                
+
+                # --- RADAR CHART SECTION ---
+                st.markdown("---")
+                st.markdown("### 🕸️ Multi-Model Radar Chart")
+                if len(model_names) >= 2:
+                    import pandas as pd
+                    radar_metrics = {}
+                    for model in model_names:
+                        s_col = f'{model}_severity'
+                        o_col = f'{model}_occurrence'
+                        d_col = f'{model}_detection'
+                        r_col = f'{model}_rpn'
+                        s_vals = comparison_df[s_col].dropna() if s_col in comparison_df else []
+                        o_vals = comparison_df[o_col].dropna() if o_col in comparison_df else []
+                        d_vals = comparison_df[d_col].dropna() if d_col in comparison_df else []
+                        rpn_vals = comparison_df[r_col].dropna() if r_col in comparison_df else []
+                        crit_count = (rpn_vals >= 250).sum() if len(rpn_vals) > 0 else 0
+                        radar_metrics[model] = {
+                            'Severity': float(s_vals.mean()) if len(s_vals) > 0 else 0,
+                            'Occurrence': float(o_vals.mean()) if len(o_vals) > 0 else 0,
+                            'Detection': float(d_vals.mean()) if len(d_vals) > 0 else 0,
+                            'RPN': float(rpn_vals.mean()) if len(rpn_vals) > 0 else 0,
+                            'Critical Risks': int(crit_count),
+                        }
+                    axes = ['Severity', 'Occurrence', 'Detection', 'RPN', 'Critical Risks']
+                    axis_max = {ax: max([radar_metrics[m][ax] for m in model_names]) or 1 for ax in axes}
+                    axis_min = {ax: min([radar_metrics[m][ax] for m in model_names]) for ax in axes}
+                    radar_data = []
+                    for model in model_names:
+                        values = []
+                        for ax in axes:
+                            v = radar_metrics[model][ax]
+                            if axis_max[ax] == axis_min[ax]:
+                                norm = 5
+                            else:
+                                norm = 10 * (v - axis_min[ax]) / (axis_max[ax] - axis_min[ax])
+                            values.append(norm)
+                        radar_data.append({
+                            'model': model,
+                            'values': values,
+                        })
+                    import plotly.graph_objects as go
+                    fig = go.Figure()
+                    for entry in radar_data:
+                        fig.add_trace(go.Scatterpolar(
+                            r=entry['values'] + [entry['values'][0]],
+                            theta=axes + [axes[0]],
+                            fill='toself',
+                            name=entry['model'],
+                            opacity=0.5
+                        ))
+                    fig.update_layout(
+                        polar=dict(
+                            radialaxis=dict(visible=True, range=[0, 10])
+                        ),
+                        showlegend=True,
+                        margin=dict(l=30, r=30, t=40, b=30),
+                        height=500,
+                        legend_title_text='Models',
+                        title="Aggregated Model Metrics (Normalized)"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.caption("Each axis is normalized (0-10) for visual comparison. Hover for exact values.")
+
                 # Show detailed comparison for high disagreement cases
                 high_disagreement = results['comparison_results']['high_disagreement_cases']
-                
                 if high_disagreement:
                     st.markdown("---")
                     st.markdown("### 🔴 High Disagreement Cases")
                     st.markdown("Failure modes where models significantly differ in their assessments:")
-                    
                     for i, case in enumerate(high_disagreement[:5], 1):  # Show top 5
                         with st.expander(f"**Case {i}: {case['failure_mode']}** (S-range: {case['severity_range']}, RPN-range: {case['rpn_range']})"):
                             st.markdown(f"**Failure Mode:** {case['failure_mode']}")
                             st.markdown(f"**Effect:** {case['effect']}")
                             st.markdown(f"**Disagreement Categories:** {', '.join(case['disagreement_categories'])}")
-                            
                             # Show individual model scores
                             scores_data = []
                             for model in model_names:
                                 if f'{model}_severity' in comparison_df.columns:
                                     model_idx = comparison_df[comparison_df['failure_mode'] == case['failure_mode']].index[0]
                                     model_row = comparison_df.loc[model_idx]
-                                    
-                                    # Check if model has values (not NaN)
                                     if pd.notna(model_row[f'{model}_severity']):
                                         scores_data.append({
                                             'Model': model,
@@ -1700,54 +1749,40 @@ def main():
                                             'RPN': 'N/A',
                                             'Priority': 'N/A'
                                         })
-                            
                             if scores_data:
                                 scores_df = pd.DataFrame(scores_data)
                                 st.dataframe(scores_df, use_container_width=True, hide_index=True)
             else:
                 st.warning("⚠️ No comparison data available. The models may not have produced comparable failure modes from the input text.")
                 st.info("💡 Tip: Try providing more detailed text about specific failure scenarios, or try different model combinations.")
-                
-                # Still show individual results if available
                 if individual_results:
                     st.markdown("### 📦 Individual Model Results")
                     for model_name, model_df in individual_results.items():
                         with st.expander(f"**{model_name}**: {len(model_df)} failure modes"):
                             st.dataframe(model_df, use_container_width=True)
-            
+
             # Display comparative summary (only if comparison_df is not empty)
             if not comparison_df.empty:
                 st.markdown("---")
                 st.markdown("### 💡 Comparative Summary Insights")
-                
                 summary = results['comparison_results']['summary']
-                
                 if summary.get('key_insights'):
                     for insight in summary['key_insights']:
                         st.info(insight)
-                
-                # Model characteristics
                 st.markdown("#### 🎯 Model Characteristics")
-                
                 col_char1, col_char2 = st.columns(2)
-                
                 with col_char1:
                     if summary.get('high_severity_model'):
                         st.markdown(f"**Assigns Higher Severity:** {summary['high_severity_model']}")
                     if summary.get('conservative_severity_model'):
                         st.markdown(f"**More Conservative Severity:** {summary['conservative_severity_model']}")
-                
                 with col_char2:
                     if summary.get('optimistic_detection_model'):
                         st.markdown(f"**Optimistic Detection:** {summary['optimistic_detection_model']}")
                     if summary.get('conservative_detection_model'):
                         st.markdown(f"**Conservative Detection:** {summary['conservative_detection_model']}")
-                
-                # Export comparison results
                 st.markdown("---")
                 st.markdown("### 💾 Export Comparison Results")
-                
-                # Export comparison summary
                 csv_comparison = comparison_display_df.to_csv(index=False)
                 st.download_button(
                     label="📥 Download Comparison Table (CSV)",
@@ -1755,8 +1790,6 @@ def main():
                     file_name=f"model_comparison_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv"
                 )
-                
-                # Export individual results
                 with st.expander("📦 Export Individual Model Results"):
                     for model_name, model_fmea in individual_results.items():
                         csv_data = model_fmea.to_csv(index=False)
