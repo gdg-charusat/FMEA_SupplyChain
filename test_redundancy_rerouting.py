@@ -127,12 +127,7 @@ Action: Activate backup routes from Warehouse_South
     
     # Generate report
     print("\n" + "="*80)
-    summary, table, cost_pct = generate_impact_report(
-        initial_solution=baseline,
-        new_solution=adjusted,
-        route_map=ROUTE_MAP,
-        disruptions=disruptions
-    )
+    summary, table, cost_pct = generate_impact_report(baseline, adjusted, ROUTE_MAP, disruptions)
     
     print("\n🎯 STRATEGIC NARRATIVE:")
     print("-" * 80)
@@ -185,10 +180,10 @@ def test_scenario_2_partial_disruption():
     adjusted = optimizer.solve(use_disrupted_costs=True)
     
     summary, table, cost_pct = generate_impact_report(
-        initial_solution=baseline,
-        new_solution=adjusted,
-        route_map=ROUTE_MAP,
-        disruptions=disruptions
+        baseline,
+        adjusted,
+        ROUTE_MAP,
+        disruptions
     )
     
     print("🎯 STRATEGIC NARRATIVE:")

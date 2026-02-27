@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, validator
 import pandas as pd
 
+logger = logging.getLogger(__name__)
 # Import dynamic route lookup for non-hardcoded cities
 try:
     from .dynamic_network import get_routes_for_city
@@ -25,8 +26,6 @@ try:
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
-
-logger = logging.getLogger(__name__)
 
 
 class DisruptionEvent(BaseModel):
