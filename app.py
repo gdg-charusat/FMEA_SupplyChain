@@ -1624,17 +1624,33 @@ def main():
 
             if not comparison_df.empty:
                 import pandas as pd  # Ensure pd is available in this scope
-                # Create comparison display
+                from src.multi_model_comparison import ComparisonVisualizationHelper
+                # Filter toggle
+                show_high_disagreement = st.toggle("Show High-Disagreement Failures Only", value=False)
+                # Create comparison display with heatmap and variance
                 comparison_display = []
                 for idx, row in comparison_df.iterrows():
                     disagreement = disagreement_matrix.get(idx, {})
-                    has_disagreement = disagreement.get('has_any_disagreement', False)
-                    disagreement_level = 3 if has_disagreement else 0
+                    indicator = ComparisonVisualizationHelper.create_disagreement_visual(
+                        sum(1 for k, v in disagreement.items() if 'has_' in k and v is True)
+                    )
+                    # Filtering logic
+                    if show_high_disagreement:
+                        # Threshold: disagreement level >= 2 (medium/high)
+                        disagreement_level = sum(1 for k, v in disagreement.items() if 'has_' in k and v is True)
+                        if disagreement_level < 2:
+                            continue
                     display_row = {
-                        'Disagreement': '🔴' if disagreement_level > 0 else '🟢',
+                        'Disagreement': indicator,
                         'Failure Mode': row['failure_mode'],
                         'Effect': row['effect']
                     }
+                    # Add mean, std, max diff for each metric
+                    for metric in ['severity', 'occurrence', 'detection', 'rpn']:
+                        display_row[f'{metric.capitalize()} Mean'] = f"{row[f'{metric}_mean']:.2f}"
+                        display_row[f'{metric.capitalize()} Std'] = f"{row[f'{metric}_std']:.2f}"
+                        display_row[f'{metric.capitalize()} MaxDiff'] = f"{row[f'{metric}_range']:.2f}"
+                    # Add model scores
                     for model in model_names:
                         s_col = f'{model}_severity'
                         o_col = f'{model}_occurrence'
@@ -1646,8 +1662,52 @@ def main():
                             display_row[f'{model} S|O|D|RPN'] = "N/A"
                     comparison_display.append(display_row)
                 comparison_display_df = pd.DataFrame(comparison_display)
+                # Heatmap styling
+                def heatmap_style(val, std_thresh=2, maxdiff_thresh=3):
+                    try:
+                        v = float(val)
+                    except:
+                        return ''
+                    if v >= maxdiff_thresh:
+                        return 'background-color: #ffcccc'  # High disagreement
+                    elif v >= std_thresh:
+                        return 'background-color: #fff2cc'  # Moderate
+                    elif v > 0:
+                        return 'background-color: #e6ffe6'  # Low
+                    else:
+                        return ''
                 if len(comparison_display_df) > 0:
-                    st.dataframe(comparison_display_df, use_container_width=True, height=400)
+                    styled_df = comparison_display_df.style.applymap(heatmap_style, subset=[
+                        'Severity Std', 'Occurrence Std', 'Detection Std', 'Rpn Std',
+                        'Severity MaxDiff', 'Occurrence MaxDiff', 'Detection MaxDiff', 'Rpn MaxDiff'
+                    ])
+                    st.dataframe(styled_df, use_container_width=True, height=400)
+
+                    # --- Disagreement Analytics Panel ---
+                    st.markdown("---")
+                    with st.expander("📊 Disagreement Analytics"):
+                        metrics = results['comparison_results'].get('metrics', {})
+                        st.markdown(f"**Overall Disagreement Index:** {metrics.get('total_disagreement_pct', 0):.1f}%")
+                        st.markdown("#### Metric-wise Variance Summary")
+                        st.write({
+                            'Avg Severity Std': f"{comparison_df['severity_std'].mean():.2f}",
+                            'Avg Occurrence Std': f"{comparison_df['occurrence_std'].mean():.2f}",
+                            'Avg Detection Std': f"{comparison_df['detection_std'].mean():.2f}",
+                            'Avg RPN Std': f"{comparison_df['rpn_std'].mean():.2f}"
+                        })
+                        # Most controversial failure mode
+                        max_var_idx = comparison_df['rpn_std'].idxmax()
+                        st.markdown(f"**Most Controversial Failure Mode:** {comparison_df.loc[max_var_idx, 'failure_mode']} (RPN Std: {comparison_df.loc[max_var_idx, 'rpn_std']:.2f})")
+                        # Small bar chart for metric spreads
+                        import plotly.graph_objects as go
+                        bar_fig = go.Figure()
+                        bar_fig.add_trace(go.Bar(
+                            x=['Severity', 'Occurrence', 'Detection', 'RPN'],
+                            y=[comparison_df['severity_std'].mean(), comparison_df['occurrence_std'].mean(), comparison_df['detection_std'].mean(), comparison_df['rpn_std'].mean()],
+                            marker_color=['#ff7f0e', '#1f77b4', '#2ca02c', '#d62728']
+                        ))
+                        bar_fig.update_layout(title="Average Metric Standard Deviation", height=300)
+                        st.plotly_chart(bar_fig, use_container_width=True)
                 else:
                     st.warning("⚠️ Comparison display is empty")
 
