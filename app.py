@@ -387,10 +387,7 @@ def main():
     MAX_FILE_SIZE_MB = 200
     MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
     ALLOWED_IMAGE_TYPES = ['png', 'jpg', 'jpeg']
-<<<<<<< ocrSpecificMessage
     ALLOWED_TEXT_TYPES = ['txt', 'doc', 'docx', 'pdf']
-=======
->>>>>>> main
     ALLOWED_STRUCTURED_TYPES = ['csv', 'xlsx', 'xls']
     ALLOWED_OCR_TYPES = ['jpg', 'jpeg', 'png', 'pdf']
 
