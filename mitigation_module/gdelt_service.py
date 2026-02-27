@@ -13,11 +13,20 @@ import pandas as pd
 from typing import List, Dict
 import logging
 from datetime import datetime
+def enforce_https(url: str) -> str:
+    """
+    SECURITY FIX:
+    Enforce HTTPS-only communication to prevent MITM attacks
+    and ensure integrity of external GDELT data.
+    """
+    if not url.startswith("https://"):
+        raise ValueError(f"Insecure URL blocked (HTTPS required): {url}")
+    return url
 
 logger = logging.getLogger(__name__)
 
 # GDELT Master File List URL
-GDELT_MASTER_URL = "http://data.gdeltproject.org/gdeltv2/masterfilelist-translation.txt"
+GDELT_MASTER_URL = "https://data.gdeltproject.org/gdeltv2/masterfilelist-translation.txt"
 
 # Themes to filter for supply chain disruptions
 TARGET_THEMES = [
@@ -136,7 +145,8 @@ def test_gdelt_connection() -> bool:
     ⚠️ ON HOLD
     """
     try:
-        response = requests.head(GDELT_MASTER_URL, timeout=5)
+        secure_url = enforce_https(GDELT_MASTER_URL)
+        response = requests.head(secure_url, timeout=5, verify=True)
         return response.status_code == 200
     except Exception as e:
         logger.error(f"GDELT connection test failed: {e}")
