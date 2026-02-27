@@ -98,8 +98,17 @@ def load_config():
     """Load configuration from YAML file"""
     config_path = Path('config/config.yaml')
     if config_path.exists():
-        with open(config_path, 'r') as f:
-            return yaml.safe_load(f)
+        try:
+            with open(config_path, 'r') as f:
+                return yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            st.error(f"Error parsing configuration file: {e}")
+            logger.error(f"YAML parsing error: {e}")
+            return {}
+        except Exception as e:
+            st.error(f"Error reading configuration file: {e}")
+            logger.error(f"Error reading config: {e}")
+            return {}
     else:
         st.error("Configuration file not found!")
         return {}
