@@ -585,11 +585,12 @@ def main():
                     key='hybrid_text'
                 )
             
-            if (structured_file or unstructured_text) and st.button("🚀 Generate Hybrid FMEA", type="primary"):
-                # Validate inputs
+            generate_hybrid_btn = st.button("🚀 Generate Hybrid FMEA", type="primary")
+            if generate_hybrid_btn:
+                # Validate that at least one valid input is provided
                 has_valid_file = False
                 has_valid_text = False
-                
+
                 if structured_file:
                     try:
                         file_ext = structured_file.name.split('.')[-1].lower()
@@ -599,48 +600,50 @@ def main():
                             check_df = pd.read_excel(structured_file)
                         structured_file.seek(0)
                         
-                        if check_df.empty:
+                        if check_df.empty or len(check_df) == 0:
                             st.error("⚠️ The uploaded structured file contains no data rows.")
-                        else:
-                            has_valid_file = True
+                            st.stop()
+                        has_valid_file = True
                     except Exception as e:
                         st.error(f"⚠️ Unable to read the structured file. Error: {e}")
+                        st.stop()
                 
                 if unstructured_text and unstructured_text.strip():
                     has_valid_text = True
                 
                 if not has_valid_file and not has_valid_text:
-                    st.error("⚠️ Please provide at least one valid input: upload a structured file OR enter text manually.")
-                elif has_valid_file or has_valid_text:
-                    with st.spinner("Processing hybrid data..."):
-                        try:
-                            generator = initialize_generator(config)
-                            
-                            structured_path = None
-                            text_data = None
-                            
-                            if has_valid_file:
-                                structured_path = Path(f"temp_structured_{structured_file.name}")
-                                with open(structured_path, "wb") as f:
-                                    f.write(structured_file.getbuffer())
-                            
-                            if has_valid_text:
-                                text_data = [line.strip() for line in unstructured_text.split('\n') if line.strip()]
-                            
-                            fmea_df = generator.generate_hybrid(
-                                structured_file=str(structured_path) if structured_path else None,
-                                text_input=text_data if text_data else None
-                            )
-                            st.session_state['fmea_df'] = fmea_df
-                            st.session_state['fmea_saved'] = False
-                            
-                            # Cleanup
-                            if structured_path:
-                                structured_path.unlink(missing_ok=True)
-                        except ValueError as e:
-                            st.error(f"❌ {str(e)}")
-                        except Exception as e:
-                            st.error(f"❌ Error processing hybrid data: {str(e)}")
+                    st.error("⚠️ Please provide at least one input: upload a structured file OR enter text manually.")
+                    st.stop()
+
+                with st.spinner("Processing hybrid data..."):
+                    try:
+                        generator = initialize_generator(config)
+                        
+                        structured_path = None
+                        text_data = None
+                        
+                        if has_valid_file:
+                            structured_path = Path(f"temp_structured_{structured_file.name}")
+                            with open(structured_path, "wb") as f:
+                                f.write(structured_file.getbuffer())
+                        
+                        if has_valid_text:
+                            text_data = [line.strip() for line in unstructured_text.split('\n') if line.strip()]
+                        
+                        fmea_df = generator.generate_hybrid(
+                            structured_file=str(structured_path) if structured_path else None,
+                            text_input=text_data if text_data else None
+                        )
+                        st.session_state['fmea_df'] = fmea_df
+                        st.session_state['fmea_saved'] = False
+                        
+                        # Cleanup
+                        if structured_path:
+                            structured_path.unlink(missing_ok=True)
+                    except ValueError as e:
+                        st.error(f"❌ {str(e)}")
+                    except Exception as e:
+                        st.error(f"❌ Error processing hybrid data: {str(e)}")
         
         # Display results
         if 'fmea_df' in st.session_state:
