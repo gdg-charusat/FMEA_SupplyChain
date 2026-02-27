@@ -43,7 +43,6 @@ pyyaml>=6.0.0
 tqdm>=4.66.0
 openai>=1.0.0
 
-# OCR Libraries
 pytesseract>=0.3.10
 easyocr>=1.7.0
 Pillow>=10.0.0
@@ -53,3 +52,4 @@ PyMuPDF>=1.24.0
 openai-whisper>=20231117
 audio-recorder-streamlit>=0.0.8
 soundfile>=0.12.0
+python-docx>=0.8.11
