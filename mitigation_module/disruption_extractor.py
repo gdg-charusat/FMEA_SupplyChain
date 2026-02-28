@@ -223,7 +223,8 @@ class DisruptionExtractor:
         # STEP 3: If still no routes, extract from specific number patterns
         if not affected_routes:
             # Look for any standalone numbers that might be route IDs (1-8)
-            all_numbers = re.findall(r'\b([1-8])\b', text_lower)
+      
+            all_numbers = re.findall(r'\b(\d+)\b', text_lower)
             if all_numbers:
                 affected_routes = [int(n) for n in all_numbers]
                 print(f"[EXTRACTOR] Extracted standalone numbers as routes: {affected_routes}")
