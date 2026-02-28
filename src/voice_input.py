@@ -56,15 +56,15 @@ class VoiceInputProcessor:
 
         model = self.load_model()
 
-        # Write audio bytes to a temporary file so soundfile can read it
-        tmp_path = None
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                tmp.write(audio_bytes)
-                tmp_path = tmp.name
+        # ✅ FIX: Use context manager for guaranteed cleanup
+        # delete=True ensures file is deleted even if exception occurs
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
+            # Write audio bytes
+            tmp.write(audio_bytes)
+            tmp.flush()  # ✅ Ensure data is written to disk before reading
 
             # Read audio with soundfile (no ffmpeg needed)
-            audio_data, sample_rate = sf.read(tmp_path, dtype="float32")
+            audio_data, sample_rate = sf.read(tmp.name, dtype="float32")
 
             # Convert stereo to mono if necessary
             if audio_data.ndim > 1:
@@ -80,9 +80,7 @@ class VoiceInputProcessor:
             result = model.transcribe(audio_data, language=language)
             text = result.get("text", "").strip()
             return text
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                os.remove(tmp_path)
+        # ✅ File automatically deleted here, even if exception occurs
 
     def validate_transcription(self, text: str) -> dict:
         """
