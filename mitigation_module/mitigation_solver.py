@@ -4,6 +4,7 @@ import os
 from io import StringIO
 from .network_config import route_map, DEMAND_REQ
 from .risk_monitor import scan_news_for_risk
+from .gdelt_service import GDELTService
 from .dynamic_network import (
     get_routes_for_city, 
     get_route_cost, 
@@ -28,7 +29,35 @@ Route (ID),Route Distance (km),Cost per Kilometer ($)
 8,158.00,2.0
 """
 
-def solve_guardian_plan(user_input_text):
+
+def _is_env_enabled(flag_name: str) -> bool:
+    return os.getenv(flag_name, "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_risk_data(destination, use_live_gdelt=False, gdelt_service=None):
+    """
+    Resolve risk data for destination.
+    Priority when enabled: GDELT live signal -> static risk monitor fallback.
+    """
+    enable_live = use_live_gdelt or _is_env_enabled("USE_GDELT_LIVE_RISK")
+
+    if enable_live:
+        service = gdelt_service or GDELTService()
+        try:
+            live_risk = service.get_city_risk(destination)
+            if live_risk:
+                return live_risk
+        except Exception as exc:  # noqa: BLE001
+            print(f"[GUARDIAN] Live GDELT lookup failed for {destination}: {exc}. Falling back to static monitor.")
+
+    fallback_risk = scan_news_for_risk(destination)
+    if fallback_risk:
+        fallback_risk = dict(fallback_risk)
+        fallback_risk.setdefault("source", "static")
+    return fallback_risk
+
+
+def solve_guardian_plan(user_input_text, use_live_gdelt=False, gdelt_service=None):
     """
     The Main Guardian Logic with Dynamic City Support:
     1. Parse User Plan (any city name + quantities/budget/dates).
@@ -63,7 +92,11 @@ def solve_guardian_plan(user_input_text):
         print(f"[GUARDIAN] {destination} is NEW - creating dynamic routes")
 
     # STEP 2: Check Active Risks (works for any city)
-    risk_data = scan_news_for_risk(destination)
+    risk_data = _resolve_risk_data(
+        destination,
+        use_live_gdelt=use_live_gdelt,
+        gdelt_service=gdelt_service,
+    )
     
     # STEP 3: Load CSV for cost data (if available)
     csv_path = 'Dataset_AI_Supply_Optimization.csv'
@@ -89,7 +122,8 @@ def solve_guardian_plan(user_input_text):
     if risk_data:
         multiplier = risk_data['multiplier']
         reason = risk_data['reason']
-        risk_info_str = f"ALERT: {reason}. Costs spiked {multiplier}x."
+        source = risk_data.get('source', 'risk monitor').upper()
+        risk_info_str = f"ALERT: {reason}. Costs spiked {multiplier}x. Source: {source}."
         
         # DYNAMIC: Get primary route using helper function (NO HARDCODING)
         primary_route_id = get_primary_route_for_city(destination)

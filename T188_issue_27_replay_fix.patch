@@ -1,0 +1,88 @@
+diff --git a/pkg/service/replay/replay.go b/pkg/service/replay/replay.go
+index 1111111..2222222 100644
+--- a/pkg/service/replay/replay.go
++++ b/pkg/service/replay/replay.go
+@@
+ package replay
+ 
+ import (
++    "sync"
+     // ... existing imports
+ )
+ 
+ var (
+     completeTestReport   = make(map[string]VerdictType) // existing
+     completeTestReportMu sync.Mutex                     // existing
++
++    // FIX[T188/#27]:
++    // Protect failedTCsBySetID like completeTestReport to avoid concurrent map writes.
++    failedTCsBySetID   = make(map[string][]string)
++    failedTCsBySetIDMu sync.RWMutex
+ )
+@@
+ func (r *Replayer) someFunctionThatResetsState(...) {
+     // existing reset logic
+ 
+-    failedTCsBySetID = make(map[string][]string)
++    failedTCsBySetIDMu.Lock()
++    failedTCsBySetID = make(map[string][]string)
++    failedTCsBySetIDMu.Unlock()
+ }
+@@
+ func (r *Replayer) someFunctionThatStoresFailedTCs(testSet string, failedTcIDs []string) {
+-    failedTCsBySetID[testSet] = failedTcIDs
++    failedTCsBySetIDMu.Lock()
++    // copy to avoid aliasing if caller reuses/slices later
++    failedTCsBySetID[testSet] = append([]string(nil), failedTcIDs...)
++    failedTCsBySetIDMu.Unlock()
+ }
+@@
+ func (r *Replayer) someFunctionThatReadsFailedTCs(testSet string) []string {
+-    return failedTCsBySetID[testSet]
++    failedTCsBySetIDMu.RLock()
++    ids := append([]string(nil), failedTCsBySetID[testSet]...)
++    failedTCsBySetIDMu.RUnlock()
++    return ids
+ }
+@@
+ func (r *Replayer) replaySingleSetOrEquivalent(...) error {
+-    // BUG: mutates shared config globally, affecting subsequent sets/runs
+-    for r.config.Test.MaxFailAttempts > 0 {
+-        err := r.tryReplay(...)
+-        if err == nil {
+-            return nil
+-        }
+-        r.config.Test.MaxFailAttempts--
+-    }
++    // FIX[T188/#27]:
++    // Use local retry budget; do not mutate shared config.
++    remainingAttempts := r.config.Test.MaxFailAttempts
++    for remainingAttempts > 0 {
++        err := r.tryReplay(...)
++        if err == nil {
++            return nil
++        }
++        remainingAttempts--
++    }
+     return errReplayFailed
+ }
+@@
+ // Optional helper if multiple call sites need map read/write:
++func setFailedTCsForSet(testSet string, failedTcIDs []string) {
++    failedTCsBySetIDMu.Lock()
++    failedTCsBySetID[testSet] = append([]string(nil), failedTcIDs...)
++    failedTCsBySetIDMu.Unlock()
++}
++
++func getFailedTCsForSet(testSet string) []string {
++    failedTCsBySetIDMu.RLock()
++    ids := append([]string(nil), failedTCsBySetID[testSet]...)
++    failedTCsBySetIDMu.RUnlock()
++    return ids
++}
++
++func resetFailedTCsBySetID() {
++    failedTCsBySetIDMu.Lock()
++    failedTCsBySetID = make(map[string][]string)
++    failedTCsBySetIDMu.Unlock()
++}
