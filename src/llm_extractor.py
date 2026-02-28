@@ -55,20 +55,34 @@ class LLMExtractor:
     # ---------------- MODEL LOADING ---------------- #
 
     def _load_model(self):
+ fix-cli-config-precedence
+        """Load the LLM model and tokenizer"""
+
+        model_name = self.model_config.get("name")
+
+        # If CLI disabled model or config explicitly sets it to None
+        if not model_name:
+            logger.info("No model specified. Using rule-based extraction.")
+
         model_name = self.model_config.get(
             "name", "mistralai/Mistral-7B-Instruct-v0.2"
         )
 
         if not self._validate_model_name(model_name):
             logger.error(f"Model '{model_name}' not trusted. Using rule-based extraction.")
+ main
             self.pipeline = None
             return
 
         logger.info(f"Loading model: {model_name}")
 
         try:
+ fix-cli-config-precedence
+            quantization_config = None
+
             # Quantization
             quant_config = None
+ main
             if self.model_config.get("quantization", True):
                 quant_config = BitsAndBytesConfig(
                     load_in_4bit=True,
@@ -77,7 +91,9 @@ class LLMExtractor:
                     bnb_4bit_use_double_quant=True,
                 )
 
+ fix-cli-config-precedence
             # Tokenizer (SECURE)
+ main
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name, trust_remote_code=False
             )
@@ -85,12 +101,26 @@ class LLMExtractor:
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
 
+ fix-cli-config-precedence
+            device_config = self.model_config.get("device", "auto")
+
+            device_map = None
+            actual_device = device_config
+
+            if device_config == "auto":
+                device_map = "auto"
+                actual_device = "cuda" if torch.cuda.is_available() else "cpu"
+            else:
+                actual_device = device_config
+
+
             # Device handling
             device = self.model_config.get("device", "auto")
             if device == "auto":
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
             # Model (SECURE)
+ main
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 quantization_config=quant_config,
@@ -98,9 +128,15 @@ class LLMExtractor:
                 torch_dtype=torch.float16 if device != "cpu" else torch.float32,
             )
 
+ fix-cli-config-precedence
+            if device_map is None and actual_device in ["cpu", "cuda"]:
+                self.model = self.model.to(actual_device)
+
+
             self.model = self.model.to(device)
 
             # Pipeline
+ main
             self.pipeline = pipeline(
                 "text-generation",
                 model=self.model,
