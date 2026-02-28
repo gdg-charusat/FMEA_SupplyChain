@@ -10,6 +10,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Module-level tolerance for quantity comparisons (centralized).
+_QUANTITY_TOLERANCE = 0.01
+
+
+def _format_quantity(qty: float) -> str:
+    """
+    Format quantity for display, showing decimals only when needed.
+    
+    Examples:
+        10.0 -> "10"
+        10.5 -> "10.5"
+        10.50 -> "10.5"
+        10.123 -> "10.12"
+    """
+    # Use a tiny tolerance to avoid floating-point equality pitfalls
+    if abs(qty - int(qty)) < 1e-9:
+        return str(int(qty))
+    else:
+        # Show up to 2 decimal places, strip trailing zeros
+        formatted = f"{qty:.2f}".rstrip('0').rstrip('.')
+        return formatted
+
+
 def generate_impact_report(
     initial_solution: Dict,
     new_solution: Dict,
@@ -202,12 +225,14 @@ def _generate_impact_table(
             destinations[dest].append(route_id)
     
     # Sort destinations alphabetically
+    # Use module-level tolerance for consistency
+    
     for dest in sorted(destinations.keys()):
         dest_routes = destinations[dest]
         
         # Separate primary (had flow in original) vs backup (no flow in original)
-        primary_routes = [r for r in dest_routes if initial_flows.get(r, 0) > 0]
-        backup_routes = [r for r in dest_routes if initial_flows.get(r, 0) == 0 and new_flows.get(r, 0) > 0]
+        primary_routes = [r for r in dest_routes if initial_flows.get(r, 0) > _QUANTITY_TOLERANCE]
+        backup_routes = [r for r in dest_routes if initial_flows.get(r, 0) < _QUANTITY_TOLERANCE and new_flows.get(r, 0) > _QUANTITY_TOLERANCE]
         
         # Clean destination name
         dest_clean = dest.replace("Client_", "").replace("_", " ")
@@ -225,16 +250,16 @@ def _generate_impact_table(
             if is_disrupted:
                 route_strategy = f"⚠️ To {dest_clean}"
             
-            # Format quantities with disruption warning
-            original_plan = f"Route {route_id}: {int(old_qty)} Units"
-            if is_disrupted and old_qty > 0 and new_qty > 0 and abs(old_qty - new_qty) < 1:
+            # Format quantities with disruption warning (preserve decimals)
+            original_plan = f"Route {route_id}: {_format_quantity(old_qty)} Units"
+            if is_disrupted and old_qty > 0 and new_qty > 0 and abs(old_qty - new_qty) < _QUANTITY_TOLERANCE:
                 # Same flow but disrupted - show cost impact
-                new_plan = f"Route {route_id}: {int(new_qty)} Units (⚠️ Higher Cost)"
-            elif new_qty > 0 and old_qty > 0 and new_qty != old_qty:
+                new_plan = f"Route {route_id}: {_format_quantity(new_qty)} Units (⚠️ Higher Cost)"
+            elif new_qty > 0 and old_qty > 0 and abs(new_qty - old_qty) >= _QUANTITY_TOLERANCE:
                 # Balanced - show split
-                new_plan = f"Route {route_id}: {int(new_qty)} Units"
+                new_plan = f"Route {route_id}: {_format_quantity(new_qty)} Units"
             else:
-                new_plan = f"Route {route_id}: {int(new_qty)} Units" if new_qty > 0 else f"Route {route_id}: 0 Units"
+                new_plan = f"Route {route_id}: {_format_quantity(new_qty)} Units" if new_qty > _QUANTITY_TOLERANCE else f"Route {route_id}: 0 Units"
             
             rows.append({
                 'Route Strategy': route_strategy,
@@ -255,7 +280,7 @@ def _generate_impact_table(
             rows.append({
                 'Route Strategy': route_strategy,
                 'Original Plan (Standard)': f"Route {route_id}: 0 Units",
-                'New Mitigation Plan (Post-Alert)': f"Route {route_id}: {int(new_qty)} Units",
+                'New Mitigation Plan (Post-Alert)': f"Route {route_id}: {_format_quantity(new_qty)} Units",
                 'Status': status
             })
     
@@ -275,15 +300,15 @@ def _generate_impact_table(
 
 
 def _determine_status(old_qty: float, new_qty: float) -> str:
-    """Determine status emoji based on quantity changes."""
-    
-    if old_qty > 0 and new_qty == 0:
+    """Determine status emoji based on quantity changes with float tolerance."""
+    # Use consistent float tolerance (module-level)
+    if old_qty > _QUANTITY_TOLERANCE and new_qty < _QUANTITY_TOLERANCE:
         return "🔴 STOPPED"
-    elif old_qty == 0 and new_qty > 0:
+    elif old_qty < _QUANTITY_TOLERANCE and new_qty > _QUANTITY_TOLERANCE:
         return "🟢 ACTIVATED"
-    elif abs(old_qty - new_qty) < 0.01:  # Floating point comparison
+    elif abs(old_qty - new_qty) < _QUANTITY_TOLERANCE:
         return "⚪ UNCHANGED"
-    elif old_qty > 0 and new_qty > 0:
+    elif old_qty > _QUANTITY_TOLERANCE and new_qty > _QUANTITY_TOLERANCE:
         return "🟡 BALANCED"
     else:
         return "⚪ UNCHANGED"
@@ -311,12 +336,13 @@ def get_route_change_summary(
     route_map: Dict[int, Tuple[str, str]]
 ) -> Dict[str, int]:
     """
-    Get summary counts of route status changes.
+    Get summary counts of route status changes with float tolerance.
     
     Returns:
         Dict with counts: {'stopped': int, 'activated': int, 'balanced': int, 'unchanged': int}
     """
     
+    # Use consistent float tolerance (module-level)
     counts = {'stopped': 0, 'activated': 0, 'balanced': 0, 'unchanged': 0}
     
     all_routes = set(list(initial_flows.keys()) + list(new_flows.keys()))
@@ -325,13 +351,13 @@ def get_route_change_summary(
         old_qty = initial_flows.get(route_id, 0)
         new_qty = new_flows.get(route_id, 0)
         
-        if old_qty > 0 and new_qty == 0:
+        if old_qty > _QUANTITY_TOLERANCE and new_qty < _QUANTITY_TOLERANCE:
             counts['stopped'] += 1
-        elif old_qty == 0 and new_qty > 0:
+        elif old_qty < _QUANTITY_TOLERANCE and new_qty > _QUANTITY_TOLERANCE:
             counts['activated'] += 1
-        elif abs(old_qty - new_qty) < 0.01:
+        elif abs(old_qty - new_qty) < _QUANTITY_TOLERANCE:
             counts['unchanged'] += 1
-        elif old_qty > 0 and new_qty > 0:
+        elif old_qty > _QUANTITY_TOLERANCE and new_qty > _QUANTITY_TOLERANCE:
             counts['balanced'] += 1
     
     return counts
