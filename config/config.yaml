@@ -119,7 +119,26 @@ prompts:
     Existing Controls: {controls}
     
     Return only the numeric detection score (1-10).
-
+# Multi-Model Comparison Settings
+model_comparison:
+  # RPN difference threshold for disagreement detection
+  rpn_diff_threshold: 50
+  
+  # Severity score difference threshold for disagreement detection
+  severity_diff_threshold: 2
+  
+  # Occurrence score difference threshold for disagreement detection
+  occurrence_diff_threshold: 2
+  
+  # Detection score difference threshold for disagreement detection
+  detection_diff_threshold: 2
+  
+  # Available models for comparison
+  available_models:
+    - "mistralai/Mistral-7B-Instruct-v0.2"
+    - "meta-llama/Llama-2-7b-chat-hf"
+    - "gpt2"
+    - "Rule-based (No LLM)"
 # Voice Input Settings
 voice_input:
   enabled: true
