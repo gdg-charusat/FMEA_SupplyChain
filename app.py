@@ -579,35 +579,17 @@ def main():
             
             if text_input_method == "Upload File":
                 uploaded_file = st.file_uploader(
-<<<<<<< ocrSpecificMessage
                     "Upload a text document (TXT, DOC, DOCX, PDF)",
                     type=['txt', 'doc', 'docx', 'pdf'],
                     help=f"Supported formats: TXT, DOC, DOCX, PDF. Max size: {MAX_FILE_SIZE_MB} MB."
-=======
-                    "Upload image file (PNG, JPEG) - OCR will extract text",
-                    type=['png', 'jpg', 'jpeg'],
-                    help=f"Supported formats: PNG, JPG, JPEG. Max size: {MAX_FILE_SIZE_MB} MB."
->>>>>>> main
                 )
                 
                 if uploaded_file:
                     # Validate uploaded file
-<<<<<<< ocrSpecificMessage
                     is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_TEXT_TYPES)
                     if not is_valid:
                         st.error(error_msg)
                         st.stop()
-=======
-                    is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_IMAGE_TYPES)
-                    if not is_valid:
-                        st.error(error_msg)
-                        st.stop()
-                    
-                    show_file_info(uploaded_file)
-
-                    # Display uploaded image
-                    col1, col2 = st.columns([1, 2])
->>>>>>> main
                     
 
                     show_file_info(uploaded_file)
@@ -660,33 +642,9 @@ def main():
                                             st.stop()
                                         fmea_df = generator.generate_from_text(texts, is_file=False)
                                         st.session_state['fmea_df'] = fmea_df
+                                        st.session_state['fmea_saved'] = False
                 else:
                     st.info("📤 Please upload an image file (PNG, JPG, JPEG) to begin.")
-                                        st.session_state['fmea_saved'] = False
-                                else:
-                                    extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
-                            except Exception as e:
-                                st.error(f"⚠️ Failed to read file: {e}")
-                                st.stop()
-                            
-                            # Show extracted text
-                            st.markdown("**Extracted Text:**")
-                            st.text_area("", extracted_text, height=150, key="extracted", disabled=True)
-                            
-                            if not extracted_text or not extracted_text.strip():
-                                st.error("⚠️ The file contains no readable text. Please upload a different file.")
-                                st.stop()
-                            else:
-                                with st.spinner("Generating FMEA from text..."):
-                                    generator = initialize_generator(config)
-                                    texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
-                                    if not texts:
-                                        st.error("⚠️ No usable text content found in the file. Please try a different file.")
-                                        st.stop()
-                                    fmea_df = generator.generate_from_text(texts, is_file=False)
-                                    st.session_state['fmea_df'] = fmea_df
-                else:
-                    st.info("📤 Please upload a text document (TXT, DOC, DOCX, PDF) to begin.")
             else:
                 text_input = st.text_area(
                     "Enter text (reviews, reports, complaints):",
@@ -781,13 +739,10 @@ def main():
                             generator = initialize_generator(config)
                             fmea_df = generator.generate_from_text(texts, is_file=False)
                             st.session_state['fmea_df'] = fmea_df
-<<<<<<< ocrSpecificMessage
-=======
 
->>>>>>> main
+ main
             else:
                 st.info("📤 Please upload an image or PDF document for OCR extraction.")
-                            st.session_state['fmea_saved'] = False
         
         elif input_type == "🎙️ Voice Input":
             st.markdown("**🎙️ Record your failure description:**")
