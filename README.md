@@ -6,6 +6,7 @@
 ![Python](https://img.shields.io/badge/Python-3.9%2B-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 ![Status](https://img.shields.io/badge/Status-Production-success)
+![Security](https://img.shields.io/badge/Security-Hardened-brightgreen)
 
 **An intelligent system that automatically generates Failure Mode and Effects Analysis (FMEA) from both structured and unstructured data using Large Language Models**
 
@@ -13,8 +14,20 @@
 
 ---
 
+## 🔒 Security Notice
+
+**Critical Security Fix Applied**: This system has been hardened against supply chain attacks. The LLM loader now:
+- ✅ Blocks arbitrary code execution from untrusted model repositories
+- ✅ Validates models against a trusted whitelist
+- ✅ Uses `trust_remote_code=False` for all model loading
+
+📖 **See [SECURITY_FIX.md](SECURITY_FIX.md) for complete details** | [Quick Reference](SECURITY_QUICKREF.md)
+
+---
+
 ## 📋 Table of Contents
 
+- [Security Notice](#-security-notice)
 - [Overview](#overview)
 - [Features](#features)
 - [Architecture](#architecture)
@@ -70,6 +83,7 @@ This system provides a **unified, intelligent solution** to convert all these in
 - **Batch Processing**: Handle large datasets efficiently
 - **Deduplication**: Intelligent removal of similar failure modes
 - **Configurable**: YAML-based configuration for easy customization
+- **Security Hardened**: Protected against supply chain attacks with model whitelist
 
 ---
 
@@ -268,12 +282,14 @@ Edit `config/config.yaml` to customize:
 
 ```yaml
 model:
-  name: "mistralai/Mistral-7B-Instruct-v0.2"  # LLM model
+  name: "mistralai/Mistral-7B-Instruct-v0.2"  # LLM model (must be in trusted whitelist)
   max_length: 512
   temperature: 0.3
   device: "auto"  # auto, cuda, cpu
   quantization: true  # Use 4-bit quantization
 ```
+
+**Security Note**: Only whitelisted models are allowed. See [SECURITY_FIX.md](SECURITY_FIX.md) for the list of trusted models.
 
 ### Risk Scoring Parameters
 
@@ -470,9 +486,16 @@ This system is suitable for:
 ### Issue: Model loading fails
 
 ```bash
-# Use rule-based mode instead
+# Check if model is in trusted whitelist (see SECURITY_FIX.md)
+# Or use rule-based mode instead
 python cli.py --text input.csv --output result.xlsx --no-model
 ```
+
+### Issue: "Model not in trusted whitelist" error
+
+- **Cause**: Attempting to load an untrusted model
+- **Solution**: Use a model from the trusted whitelist (see [SECURITY_FIX.md](SECURITY_FIX.md))
+- **Alternative**: Use rule-based mode with `--no-model` flag
 
 ### Issue: Out of memory
 
