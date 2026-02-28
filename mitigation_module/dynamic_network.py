@@ -86,6 +86,10 @@ def create_direct_routes(city_name):
     global _next_dynamic_id
 
     with _dynamic_routes_lock:
+        # Guard against duplicate creation when called directly.
+        if city_name in _dynamic_direct_routes:
+            return list(_dynamic_direct_routes[city_name])
+
         route_ids = []
         warehouses = get_warehouse_list()  # Gets ALL warehouses dynamically
 
@@ -122,6 +126,10 @@ def create_multihop_routes(city_name):
     global _next_multihop_id
 
     with _dynamic_routes_lock:
+        # Guard against duplicate creation when called directly.
+        if city_name in _dynamic_multihop_routes:
+            return list(_dynamic_multihop_routes[city_name])
+
         route_ids = []
         warehouses = get_warehouse_list()
         hubs = get_hub_list()
