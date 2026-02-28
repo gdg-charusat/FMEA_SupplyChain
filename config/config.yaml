@@ -126,3 +126,12 @@ voice_input:
   language: "en"
   max_duration_seconds: 30
   model_size: "base"
+
+# Mitigation Module Settings
+mitigation:
+  gdelt:
+    enabled: false
+    master_url: "http://data.gdeltproject.org/gdeltv2/masterfilelist-translation.txt"
+    request_timeout: 5
+    max_retries: 2
+    cache_ttl_seconds: 900

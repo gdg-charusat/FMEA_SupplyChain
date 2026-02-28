@@ -149,3 +149,60 @@ def test_solver_falls_back_to_static_monitor_when_live_returns_none(monkeypatch)
     assert destination == "Chicago"
     assert "Source: STATIC" in risk_info
     assert "5.0x" in risk_info
+
+
+def test_solver_uses_gdelt_when_enabled_in_config(monkeypatch):
+    class _StubGdelt:
+        def get_city_risk(self, city_name):
+            return {
+                "city": city_name,
+                "multiplier": 10.0,
+                "reason": "TRANSPORTATION signal from GDELT",
+                "source": "gdelt",
+            }
+
+    monkeypatch.setattr(
+        "mitigation_module.mitigation_solver.scan_news_for_risk",
+        lambda city_name: {
+            "city": city_name,
+            "multiplier": 2.0,
+            "reason": "fallback static risk",
+            "source": "static",
+        },
+    )
+
+    _, _, risk_info, destination, _ = solve_guardian_plan(
+        "Ship 100 units to Seattle",
+        gdelt_service=_StubGdelt(),
+        gdelt_config={"enabled": True},
+    )
+
+    assert destination == "Seattle"
+    assert "Source: GDELT" in risk_info
+    assert "10.0x" in risk_info
+
+
+def test_solver_uses_static_when_config_disables_gdelt(monkeypatch):
+    class _StubGdelt:
+        def get_city_risk(self, city_name):
+            raise AssertionError("GDELT should not be called when disabled")
+
+    monkeypatch.setattr(
+        "mitigation_module.mitigation_solver.scan_news_for_risk",
+        lambda city_name: {
+            "city": city_name,
+            "multiplier": 5.0,
+            "reason": "static risk path",
+            "source": "static",
+        },
+    )
+
+    _, _, risk_info, destination, _ = solve_guardian_plan(
+        "Ship 100 units to Dallas",
+        gdelt_service=_StubGdelt(),
+        gdelt_config={"enabled": False},
+    )
+
+    assert destination == "Dallas"
+    assert "Source: STATIC" in risk_info
+    assert "5.0x" in risk_info

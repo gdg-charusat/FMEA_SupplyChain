@@ -2,9 +2,11 @@ import pandas as pd
 import numpy as np
 import os
 from io import StringIO
+from pathlib import Path
+import yaml
 from .network_config import route_map, DEMAND_REQ
 from .risk_monitor import scan_news_for_risk
-from .gdelt_service import GDELTService
+from .gdelt_service import GDELTService, GDELT_MASTER_URL
 from .dynamic_network import (
     get_routes_for_city, 
     get_route_cost, 
@@ -34,15 +36,42 @@ def _is_env_enabled(flag_name: str) -> bool:
     return os.getenv(flag_name, "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _resolve_risk_data(destination, use_live_gdelt=False, gdelt_service=None):
+def _load_gdelt_config(config_path="config/config.yaml"):
+    """Load optional GDELT runtime settings from YAML config."""
+    config_file = Path(config_path)
+    if not config_file.exists():
+        return {}
+
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+    mitigation_cfg = config.get("mitigation", {}) or {}
+    gdelt_cfg = mitigation_cfg.get("gdelt", {}) or config.get("gdelt", {}) or {}
+    return gdelt_cfg if isinstance(gdelt_cfg, dict) else {}
+
+
+def _resolve_risk_data(destination, use_live_gdelt=False, gdelt_service=None, gdelt_config=None):
     """
     Resolve risk data for destination.
     Priority when enabled: GDELT live signal -> static risk monitor fallback.
     """
-    enable_live = use_live_gdelt or _is_env_enabled("USE_GDELT_LIVE_RISK")
+    gdelt_config = gdelt_config or {}
+    config_enabled = bool(gdelt_config.get("enabled", False))
+    enable_live = use_live_gdelt or config_enabled or _is_env_enabled("USE_GDELT_LIVE_RISK")
 
     if enable_live:
-        service = gdelt_service or GDELTService()
+        if gdelt_service is not None:
+            service = gdelt_service
+        else:
+            service = GDELTService(
+                master_url=gdelt_config.get("master_url", GDELT_MASTER_URL),
+                request_timeout=int(gdelt_config.get("request_timeout", 5)),
+                max_retries=int(gdelt_config.get("max_retries", 2)),
+                cache_ttl_seconds=int(gdelt_config.get("cache_ttl_seconds", 900)),
+            )
         try:
             live_risk = service.get_city_risk(destination)
             if live_risk:
@@ -57,7 +86,7 @@ def _resolve_risk_data(destination, use_live_gdelt=False, gdelt_service=None):
     return fallback_risk
 
 
-def solve_guardian_plan(user_input_text, use_live_gdelt=False, gdelt_service=None):
+def solve_guardian_plan(user_input_text, use_live_gdelt=False, gdelt_service=None, gdelt_config=None):
     """
     The Main Guardian Logic with Dynamic City Support:
     1. Parse User Plan (any city name + quantities/budget/dates).
@@ -71,6 +100,8 @@ def solve_guardian_plan(user_input_text, use_live_gdelt=False, gdelt_service=Non
     # STEP 1: Parse ALL Requirements from User Input
     requirements = extract_shipment_requirements(user_input_text)
     destination = requirements['destination']
+    if gdelt_config is None:
+        gdelt_config = _load_gdelt_config()
     
     if not destination:
         return None, None, "Unknown Destination", None, requirements
@@ -96,6 +127,7 @@ def solve_guardian_plan(user_input_text, use_live_gdelt=False, gdelt_service=Non
         destination,
         use_live_gdelt=use_live_gdelt,
         gdelt_service=gdelt_service,
+        gdelt_config=gdelt_config,
     )
     
     # STEP 3: Load CSV for cost data (if available)
