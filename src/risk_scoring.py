@@ -324,6 +324,8 @@ class RiskScoringEngine:
         
         Args:
             row: Dictionary with failure_mode, effect, cause, existing_controls
+                 May also contain _profile_severity_boost, _profile_occurrence_boost,
+                 _profile_detection_boost from model-specific extraction profiles.
             frequency_data: Historical frequency data for occurrence calculation
             
         Returns:
@@ -347,12 +349,17 @@ class RiskScoringEngine:
             row.get('existing_controls', ''),
             row.get('component', '')
         )
+
+        # Apply model-profile boosts (when present)
+        severity = min(max(severity + int(row.get('_profile_severity_boost', 0)), 1), 10)
+        occurrence = min(max(occurrence + int(row.get('_profile_occurrence_boost', 0)), 1), 10)
+        detection = min(max(detection + int(row.get('_profile_detection_boost', 0)), 1), 10)
         
         rpn = self.calculate_rpn(severity, occurrence, detection)
         action_priority = self.calculate_action_priority(severity, occurrence, detection)
         
-        # Add scores to row
-        result = row.copy()
+        # Add scores to row (strip internal profile keys)
+        result = {k: v for k, v in row.items() if not k.startswith('_profile_')}
         result.update({
             'severity': severity,
             'occurrence': occurrence,

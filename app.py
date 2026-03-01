@@ -26,6 +26,23 @@ from risk_scoring import RiskScoringEngine
 from ocr_processor import OCRProcessor
 from history_tracker import FMEAHistoryTracker
 from voice_input import VoiceInputProcessor
+from analytics import (
+    normalize_model_results,
+    calculate_fmea_variance,
+    generate_disagreement_matrix,
+    generate_model_score_matrix,
+    identify_high_variance_items,
+    calculate_consensus_scores,
+    calculate_average_agreement,
+    flag_for_expert_review,
+    identify_field_level_disagreements,
+    prepare_box_plot_data,
+    analyze_benchmark_variance,
+    prepare_radar_data,
+    calculate_consensus_metrics,
+    generate_radar_chart,
+    generate_field_radar_chart,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -527,13 +544,14 @@ def main():
         """)
     
     # Main content area
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
         "📝 Generate FMEA", 
         "🎯 PFMEA Generator", 
         "🚚 Supply Chain Risk",
         "🔄 Model Comparison",
-        "📊 Analytics", 
         "📊 Analytics",
+        "🔍 Disagreement Heatmap",
+        "🕸️ Radar Chart",
         "📈 History & Trends",
         "ℹ️ Help"
     ])
@@ -584,9 +602,6 @@ def main():
                     "Upload a text document (TXT, DOC, DOCX, PDF)",
                     type=['txt', 'doc', 'docx', 'pdf'],
                     help=f"Supported formats: TXT, DOC, DOCX, PDF. Max size: {MAX_FILE_SIZE_MB} MB."
-                    "Upload image file (PNG, JPEG) - OCR will extract text",
-                    type=['png', 'jpg', 'jpeg'],
-                    help=f"Supported formats: PNG, JPG, JPEG. Max size: {MAX_FILE_SIZE_MB} MB."
                 )
                 
                 if uploaded_file:
@@ -595,17 +610,7 @@ def main():
                     if not is_valid:
                         st.error(error_msg)
                         st.stop()
-                    is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_IMAGE_TYPES)
-                    if not is_valid:
-                        st.error(error_msg)
-                        st.stop()
                     
-                    show_file_info(uploaded_file)
-
-                    # Display uploaded image
-                    col1, col2 = st.columns([1, 2])
-                    
-
                     show_file_info(uploaded_file)
 
                     if st.button("🚀 Read File & Generate FMEA", type="primary"):
@@ -626,39 +631,6 @@ def main():
                                     extracted_text = "\n".join(
                                         para.text for para in doc.paragraphs
                                     )
-                    with col1:
-                        st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
-                    
-                    with col2:
-                        if st.button("🚀 Extract Text & Generate FMEA", type="primary"):
-                            with st.spinner("Extracting text from image..."):
-                                # Extract text using OCR
-                                extracted_text = extract_text_from_image(uploaded_file)
-                                
-                                # Show extracted text
-                                st.markdown("**Extracted Text:**")
-                                st.text_area("", extracted_text, height=150, key="extracted", disabled=True)
-                                
-                                # Validate OCR output
-                                if not extracted_text or not extracted_text.strip():
-                                    st.error("⚠️ OCR failed to extract any readable text from the image. Please upload a clearer image.")
-                                    st.stop()
-                                elif "Error" in extracted_text or "No text found" in extracted_text:
-                                    st.error(extracted_text)
-                                    st.stop()
-                                else:
-                                    with st.spinner("Generating FMEA from extracted text..."):
-                                        generator = initialize_generator(config)
-                                        # Split text into lines
-                                        texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
-                                        if not texts:
-                                            st.error("⚠️ OCR extracted text contains no usable content. Please try a different image.")
-                                            st.stop()
-                                        fmea_df = generator.generate_from_text(texts, is_file=False)
-                                        st.session_state['fmea_df'] = fmea_df
-                else:
-                    st.info("📤 Please upload an image file (PNG, JPG, JPEG) to begin.")
-                                        st.session_state['fmea_saved'] = False
                                 else:
                                     extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
                             except Exception as e:
@@ -777,9 +749,9 @@ def main():
                             generator = initialize_generator(config)
                             fmea_df = generator.generate_from_text(texts, is_file=False)
                             st.session_state['fmea_df'] = fmea_df
+                            st.session_state['fmea_saved'] = False
             else:
                 st.info("📤 Please upload an image or PDF document for OCR extraction.")
-                            st.session_state['fmea_saved'] = False
         
         elif input_type == "🎙️ Voice Input":
             st.markdown("**🎙️ Record your failure description:**")
@@ -1871,6 +1843,7 @@ def main():
                         
                         # Store results in session state
                         st.session_state['comparison_results'] = comparison_results
+                        st.session_state['multi_model_results'] = comparison_results['individual_results']
                         
                         # Show summary of generated results
                         num_failure_modes = len(comparison_results['comparison_results']['comparison_df'])
@@ -2220,7 +2193,258 @@ def main():
                 st.write(fmea_df['Detection'].describe())
         else:
             st.info("Generate an FMEA first to see analytics.")
-    with tab5:
+
+    # =====================================================================
+    # TAB 6 — Disagreement Heatmap
+    # =====================================================================
+    with tab6:
+        st.markdown('<div class="sub-header">🔥 Multi-Model Disagreement Heatmap</div>', unsafe_allow_html=True)
+
+        if 'multi_model_results' in st.session_state and st.session_state['multi_model_results']:
+            mm_results = st.session_state['multi_model_results']
+
+            # --- Confidence gauge ---
+            consensus_metrics = calculate_consensus_metrics(mm_results)
+            badge = consensus_metrics['badge']
+            badge_color = consensus_metrics['badge_color']
+            overall = consensus_metrics['overall_consensus']
+
+            col_badge, col_detail = st.columns([1, 3])
+            with col_badge:
+                st.markdown(
+                    f"<div style='text-align:center;padding:18px;border-radius:12px;"
+                    f"background:{badge_color}22;border:2px solid {badge_color}'>"
+                    f"<span style='font-size:2.2rem;font-weight:700;color:{badge_color}'>"
+                    f"{badge}</span><br>"
+                    f"<span style='font-size:0.95rem;color:#666'>AI Confidence</span></div>",
+                    unsafe_allow_html=True,
+                )
+            with col_detail:
+                st.metric("Overall Consensus", f"{overall:.1%}")
+                high_fields = consensus_metrics['high_agreement_fields']
+                low_fields = consensus_metrics['low_agreement_fields']
+                if high_fields:
+                    st.success(f"✅ High agreement: {', '.join(high_fields)}")
+                if low_fields:
+                    st.warning(f"⚠️ Low agreement: {', '.join(low_fields)}")
+
+            st.markdown("---")
+
+            # --- Disagreement heatmap ---
+            st.subheader("Model × Model Disagreement (Mean |ΔRPN|)")
+            disagree_matrix = generate_disagreement_matrix(mm_results)
+            if not disagree_matrix.empty:
+                fig_heat = px.imshow(
+                    disagree_matrix.values,
+                    x=disagree_matrix.columns.tolist(),
+                    y=disagree_matrix.index.tolist(),
+                    color_continuous_scale='RdYlGn_r',
+                    text_auto='.1f',
+                    labels=dict(color="Mean |ΔRPN|"),
+                )
+                fig_heat.update_layout(height=420, margin=dict(t=30, b=30))
+                st.plotly_chart(fig_heat, use_container_width=True)
+
+            # --- Variance table ---
+            st.subheader("Per-Item RPN Variance")
+            var_df = calculate_fmea_variance(mm_results)
+            if not var_df.empty:
+                st.dataframe(var_df.style.background_gradient(cmap='YlOrRd', subset=['RPN_var']),
+                             use_container_width=True)
+                high_var = identify_high_variance_items(
+                    mm_results,
+                    threshold=st.slider("Variance threshold", 10.0, 200.0, 50.0, key='var_thresh'),
+                )
+                if not high_var.empty:
+                    st.warning(f"⚠️ {len(high_var)} items exceed variance threshold")
+                    st.dataframe(high_var, use_container_width=True)
+
+            # --- Box plots ---
+            st.subheader("RPN Distribution by Model")
+            box_data = prepare_box_plot_data(mm_results, 'RPN')
+            if box_data:
+                fig_box = go.Figure()
+                for model_name, vals in box_data.items():
+                    fig_box.add_trace(go.Box(y=vals, name=model_name, boxmean='sd'))
+                fig_box.update_layout(yaxis_title="RPN", height=400)
+                st.plotly_chart(fig_box, use_container_width=True)
+
+            # --- Consensus table ---
+            st.subheader("Per-Item Consensus Scores")
+            cs_df = calculate_consensus_scores(mm_results)
+            if not cs_df.empty:
+
+                def _color_consensus(val):
+                    if val >= 0.8:
+                        return 'background-color: #d4edda'
+                    elif val >= 0.5:
+                        return 'background-color: #fff3cd'
+                    return 'background-color: #f8d7da'
+
+                st.dataframe(
+                    cs_df.style.map(_color_consensus, subset=['consensus']).format('{:.2f}'),
+                    use_container_width=True,
+                )
+
+            # --- Expert review flags ---
+            flagged = flag_for_expert_review(mm_results)
+            if not flagged.empty:
+                st.subheader("🚨 Items Flagged for Expert Review")
+                st.dataframe(flagged, use_container_width=True)
+
+            # --- Field-level outliers ---
+            field_outliers = identify_field_level_disagreements(mm_results)
+            if field_outliers:
+                st.subheader("🔍 Field-Level Outliers")
+                st.dataframe(pd.DataFrame(field_outliers), use_container_width=True)
+
+            # --- CSV exports ---
+            st.markdown("---")
+            st.subheader("📥 Export Data")
+            exp_col1, exp_col2, exp_col3 = st.columns(3)
+            with exp_col1:
+                st.download_button(
+                    "Download Variance CSV",
+                    var_df.to_csv().encode('utf-8') if not var_df.empty else b'',
+                    "fmea_variance.csv", "text/csv",
+                )
+            with exp_col2:
+                st.download_button(
+                    "Download Consensus CSV",
+                    cs_df.to_csv().encode('utf-8') if not cs_df.empty else b'',
+                    "fmea_consensus.csv", "text/csv",
+                )
+            with exp_col3:
+                st.download_button(
+                    "Download Disagreement Matrix CSV",
+                    disagree_matrix.to_csv().encode('utf-8') if not disagree_matrix.empty else b'',
+                    "fmea_disagreement_matrix.csv", "text/csv",
+                )
+        else:
+            st.info("👆 Run a multi-model comparison first (Tab 4) to see the disagreement heatmap.")
+
+    # =====================================================================
+    # TAB 7 — Interactive Radar Chart
+    # =====================================================================
+    with tab7:
+        st.markdown('<div class="sub-header">🕸️ Interactive Radar Chart — Multi-Model FMEA Comparison</div>',
+                    unsafe_allow_html=True)
+
+        if 'multi_model_results' in st.session_state and st.session_state['multi_model_results']:
+            mm_results = st.session_state['multi_model_results']
+
+            # --- Consensus badge ---
+            metrics = calculate_consensus_metrics(mm_results)
+            badge = metrics['badge']
+            badge_color = metrics['badge_color']
+            overall = metrics['overall_consensus']
+
+            badge_col, summary_col = st.columns([1, 3])
+            with badge_col:
+                st.markdown(
+                    f"<div style='text-align:center;padding:20px;border-radius:14px;"
+                    f"background:{badge_color}18;border:2px solid {badge_color}'>"
+                    f"<span style='font-size:2.6rem;font-weight:800;color:{badge_color}'>"
+                    f"{badge}</span><br>"
+                    f"<span style='font-size:0.9rem;color:#888'>Model Consensus</span><br>"
+                    f"<span style='font-size:1.3rem;font-weight:600;color:{badge_color}'>"
+                    f"{overall:.0%}</span></div>",
+                    unsafe_allow_html=True,
+                )
+            with summary_col:
+                st.markdown("#### Consensus Breakdown by Field")
+                for field, info in metrics['per_field'].items():
+                    icon = '✅' if info['cv'] <= 0.25 else '⚠️'
+                    st.markdown(
+                        f"{icon} **{field}**: mean={info['mean']:.2f}, "
+                        f"std={info['std']:.2f}, CV={info['cv']:.2f}, "
+                        f"consensus={info['consensus']:.1%}"
+                    )
+
+            st.markdown("---")
+
+            # --- Main radar chart ---
+            st.subheader("🕸️ Overall Model Comparison Radar")
+            fig_radar = generate_radar_chart(mm_results)
+            st.plotly_chart(fig_radar, use_container_width=True)
+
+            # --- Radar data table ---
+            radar_data = prepare_radar_data(mm_results)
+            if radar_data:
+                radar_df = pd.DataFrame(radar_data)
+                st.markdown("**Radar Data Table**")
+                st.dataframe(
+                    radar_df.style.format({
+                        'Severity': '{:.2f}', 'Occurrence': '{:.2f}',
+                        'Detection': '{:.2f}', 'RPN': '{:.2f}',
+                        'Consistency': '{:.2%}',
+                    }),
+                    use_container_width=True,
+                )
+
+            st.markdown("---")
+
+            # --- Per-item radar selector ---
+            st.subheader("🔎 Per-Item Radar Comparison")
+            max_items = max((len(df) for df in mm_results.values()), default=0)
+            if max_items > 0:
+                item_idx = st.slider(
+                    "Select item index", 0, max_items - 1, 0, key='radar_item_idx',
+                )
+                fig_item = generate_field_radar_chart(mm_results, item_index=item_idx)
+                st.plotly_chart(fig_item, use_container_width=True)
+            else:
+                st.info("No items to display.")
+
+            st.markdown("---")
+
+            # --- Score matrix heatmap ---
+            st.subheader("📊 Score Matrix (Items × Models)")
+            score_choice = st.selectbox(
+                "Score dimension", ['RPN', 'Severity', 'Occurrence', 'Detection'],
+                key='radar_score_dim',
+            )
+            score_matrix = generate_model_score_matrix(mm_results, score_col=score_choice)
+            if not score_matrix.empty:
+                fig_sm = px.imshow(
+                    score_matrix.values,
+                    x=score_matrix.columns.tolist(),
+                    y=score_matrix.index.tolist(),
+                    color_continuous_scale='Viridis',
+                    text_auto='.1f',
+                    labels=dict(color=score_choice),
+                )
+                fig_sm.update_layout(height=max(300, 40 * len(score_matrix)))
+                st.plotly_chart(fig_sm, use_container_width=True)
+
+            # --- Benchmark summary ---
+            st.markdown("---")
+            st.subheader("📋 Benchmark Summary")
+            bench = analyze_benchmark_variance(mm_results)
+            col_b1, col_b2, col_b3 = st.columns(3)
+            col_b1.metric("Models Compared", bench['n_models'])
+            col_b2.metric("Items Analyzed", bench['n_items'])
+            col_b3.metric("Avg Agreement", f"{bench['average_agreement']:.1%}")
+
+            # Per-model stats expander
+            with st.expander("Per-Model Statistics"):
+                for model_name, stats in bench['per_model_stats'].items():
+                    st.markdown(f"**{model_name}**")
+                    stats_df = pd.DataFrame([stats])
+                    st.dataframe(stats_df, use_container_width=True)
+
+            # --- CSV export ---
+            st.markdown("---")
+            if radar_data:
+                st.download_button(
+                    "📥 Download Radar Data CSV",
+                    pd.DataFrame(radar_data).to_csv(index=False).encode('utf-8'),
+                    "radar_comparison.csv", "text/csv",
+                )
+        else:
+            st.info("👆 Run a multi-model comparison first (Tab 4) to visualize radar charts.")
+
+    with tab8:
         st.markdown('<div class="sub-header">📈 History & Trends</div>', unsafe_allow_html=True)
         
         tracker = FMEAHistoryTracker("history")
@@ -2379,7 +2603,7 @@ def main():
             
             st.dataframe(runs_df, use_container_width=True, hide_index=True)
    
-    with tab6:
+    with tab9:
         st.markdown('<div class="sub-header">Help & Documentation</div>', unsafe_allow_html=True)
         
         st.markdown("""

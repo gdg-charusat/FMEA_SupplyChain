@@ -139,6 +139,20 @@ model_comparison:
     - "meta-llama/Llama-2-7b-chat-hf"
     - "gpt2"
     - "Rule-based (No LLM)"
+
+# Benchmarking & Radar Chart settings
+benchmarking:
+  active_models:
+    - "mistralai/Mistral-7B-Instruct-v0.2"
+    - "meta-llama/Llama-2-7b-chat-hf"
+    - "gpt2"
+  agreement_threshold: 0.75     # consensus score above which models "agree"
+  variance_threshold: 50.0      # RPN variance above which item is flagged
+  consensus_cv_threshold: 0.25  # CV above which field has low agreement
+  temperature_sweep:
+    enabled: false
+    values: [0.3, 0.5, 0.7, 0.9]
+
 # Voice Input Settings
 voice_input:
   enabled: true
