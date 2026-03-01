@@ -1,0 +1,200 @@
+This comprehensive guide provides the correct format for importing FMEA data into the system.
+
+================================================================
+               STRUCTURED DATA FORMAT (Recommended)
+================================================================
+
+Use structured data when you already have well-organized failure information.
+
+REQUIRED FIELDS:
+─────────────────
+1. failure_mode (string, 5-500 chars)
+   └─ Description of how/why the component could fail
+   └─ Example: "Engine fails to start"
+
+2. effect (string, 5-500 chars)
+   └─ The consequence or impact of the failure
+   └─ Example: "Vehicle cannot be operated"
+
+3. cause (string, 5-500 chars)
+   └─ Root cause(s) of the failure
+   └─ Example: "Battery dead or starter motor malfunction"
+
+OPTIONAL FIELDS:
+─────────────────
+- component (string): The affected component/subsystem
+  Example: "Engine Starter System"
+
+- process (string): The process where failure occurs
+  Example: "Engine Start Sequence"
+
+- function (string): Function/purpose of the component
+  Example: "Initiating engine combustion"
+
+- severity (integer, 1-10): Impact on customer (1=low, 10=critical)
+  If not provided, system will calculate automatically
+
+- occurrence (integer, 1-10): Likelihood of occurrence (1=rare, 10=very likely)
+  If not provided, system will calculate automatically
+
+- detection (integer, 1-10): Detection difficulty (1=easy, 10=impossible)
+  If not provided, system will calculate automatically
+
+- existing_controls (string): Current preventive/detective controls
+  Example: "Visual battery inspection"
+
+- recommended_action (string): Action to eliminate/reduce risk
+  Example: "Replace battery or repair starter motor"
+
+- responsibility (string): Owner of the action
+  Example: "Maintenance Team"
+
+- target_completion_date (string, YYYY-MM-DD format): Deadline
+  Example: "2024-03-15"
+
+- additional_notes (string): Extra context or remarks
+  Example: "More common in cold weather"
+
+- source (string): Source of failure info
+  Valid values: review, complaint, incident_report, customer_feedback, qa_report, warranty_claim, field_report, test_report, other
+
+CSV FORMAT EXAMPLE:
+──────────────────
+failure_mode,effect,cause,component,severity,occurrence,detection
+"Engine fails to start","Vehicle cannot operate","Battery dead",Engine Starter System,8,3,9
+"Brake fluid leak","Loss of braking power","Corroded brake line",Brake System,9,2,7
+
+JSON FORMAT EXAMPLE:
+───────────────────
+[
+  {
+    "failure_mode": "Engine fails to start",
+    "effect": "Vehicle cannot be operated",
+    "cause": "Battery dead or starter motor malfunction",
+    "component": "Engine Starter System",
+    "severity": 8,
+    "occurrence": 3,
+    "detection": 9,
+    "source": "customer_review"
+  }
+]
+
+================================================================
+            UNSTRUCTURED DATA FORMAT
+================================================================
+
+Use unstructured data for raw text input (customer reviews, complaints, etc.).
+
+REQUIRED FIELDS:
+─────────────────
+1. text/review (string): Raw text content
+   └─ Minimum 5 characters
+   └─ Can be customer reviews, complaints, incident reports, etc.
+
+OPTIONAL FIELDS:
+─────────────────
+- source (string): Type of text source
+  Valid values: review, complaint, incident_report, customer_feedback, qa_report, warranty_claim, field_report, test_report, other
+  Default: "other"
+
+CSV FORMAT EXAMPLE:
+──────────────────
+text,source
+"Engine started making loud noises and completely failed",customer_review
+"Brake system malfunction caused dangerous situation",warranty_claim
+"Paint cracking after only 2 years of use",customer_feedback
+
+JSON FORMAT EXAMPLE:
+───────────────────
+[
+  {
+    "text": "Engine started making loud noises and eventually failed",
+    "source": "customer_review"
+  },
+  {
+    "text": "Brake system malfunction caused dangerous situation",
+    "source": "warranty_claim"
+  }
+]
+
+================================================================
+                    ERROR SCENARIOS & FIXES
+================================================================
+
+❌ ERROR: "Missing required field: failure_mode"
+✅ FIX: Ensure CSV/JSON has 'failure_mode' column/field with non-empty values
+
+❌ ERROR: "Text is too short" (for unstructured data)
+✅ FIX: Ensure all text entries are at least 5 characters
+
+❌ ERROR: "Invalid numeric range for severity: 15"
+✅ FIX: Risk scores (severity, occurrence, detection) must be 1-10
+
+❌ ERROR: "Invalid date format: 15/03/2024"
+✅ FIX: Use YYYY-MM-DD format (e.g., 2024-03-15)
+
+❌ ERROR: "Unsupported file format: .txt"
+✅ FIX: Use CSV (.csv), Excel (.xlsx, .xls), or JSON (.json)
+
+❌ ERROR: "File is empty"
+✅ FIX: Ensure file has at least 1 data record (excluding headers)
+
+================================================================
+                    DATA QUALITY TIPS
+================================================================
+
+1. ✏️ CLEAR & CONCISE DESCRIPTIONS
+   ✓ Good: "Engine fails to start after battery discharge"
+   ✗ Bad: "Problem with car"
+
+2. 📏 APPROPRIATE LENGTH
+   ✓ Good: 5-200 characters per field
+   ✗ Bad: Single word or 1000+ character descriptions
+
+3. 🔍 SPECIFIC DETAILS
+   ✓ Good: "Battery dead due to parasitic drain from door lights"
+   ✗ Bad: "Something is wrong"
+
+4. 📊 NUMERIC SCORES (1-10 scale)
+   ✓ Good: severity=8 (customer impact is high)
+   ✗ Bad: severity=100 or severity="high"
+
+5. 📅 DATE FORMAT CONSISTENCY
+   ✓ Good: "2024-03-15" (YYYY-MM-DD)
+   ✗ Bad: "15/03/2024" or "March 15, 2024"
+
+6. 🏷️ SOURCE CLASSIFICATION
+   ✓ Good: source="warranty_claim" (specific and standardized)
+   ✗ Bad: source="from someone" (vague)
+
+================================================================
+                    VALIDATION RULES
+================================================================
+
+FIELD LENGTH LIMITS:
+├─ failure_mode: 5-500 characters
+├─ effect: 5-500 characters
+├─ cause: 5-500 characters
+├─ component: max 200 characters
+├─ process: max 200 characters
+├─ existing_controls: max 500 characters
+├─ recommended_action: max 500 characters
+└─ additional_notes: max 1000 characters
+
+NUMERIC RANGES:
+├─ severity: 1-10 (1=minimal impact, 10=critical/catastrophic)
+├─ occurrence: 1-10 (1=rare, 10=very likely)
+└─ detection: 1-10 (1=easy to detect, 10=impossible to detect)
+
+================================================================
+                    SAMPLE FILES
+================================================================
+
+View the sample files in this directory:
+- SAMPLE_FMEA_STRUCTURED.csv: CSV format with complete records
+- SAMPLE_FMEA_STRUCTURED.json: JSON format with complete records
+- SAMPLE_FMEA_UNSTRUCTURED.csv: CSV format with raw review text
+
+Use these files as templates for your own data!
+
+================================================================
