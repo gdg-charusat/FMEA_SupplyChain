@@ -24,19 +24,10 @@ logger = logging.getLogger(__name__)
 sys.path.append(str(Path(__file__).parent / 'src'))
 
 
-from src.fmea_generator import FMEAGenerator
-from src.preprocessing import DataPreprocessor
-from src.llm_extractor import LLMExtractor
-from src.risk_scoring import RiskScoringEngine
-from src.ocr_processor import OCRProcessor
-from src.history_tracker import FMEAHistoryTracker
-from src.voice_input import VoiceInputProcessor
-
 from fmea_generator import FMEAGenerator
 from preprocessing import DataPreprocessor
 from llm_extractor import LLMExtractor
 from risk_scoring import RiskScoringEngine
-
 
 # Try to import OCR processor (optional feature)
 try:
@@ -1840,7 +1831,7 @@ def main():
         st.markdown("Compare FMEA outputs from multiple LLMs side-by-side")
         
         # Import comparison module
-        from src.multi_model_comparison import MultiModelComparator, ComparisonVisualizationHelper
+        from multi_model_comparison import MultiModelComparator, ComparisonVisualizationHelper
         
         st.markdown("### 🎯 Model Selection & Input")
         
@@ -1975,7 +1966,7 @@ def main():
 
             if not comparison_df.empty:
                 import pandas as pd  # Ensure pd is available in this scope
-                from src.multi_model_comparison import ComparisonVisualizationHelper
+                from multi_model_comparison import ComparisonVisualizationHelper
                 # Filter toggle
                 show_high_disagreement = st.toggle("Show High-Disagreement Failures Only", value=False)
                 # Create comparison display with heatmap and variance
@@ -2295,7 +2286,7 @@ def main():
         st.markdown("Visualize where different LLMs disagree on FMEA scoring and identify low-confidence areas.")
         
         import plotly.express as px
-        from src.analytics import calculate_fmea_variance, generate_disagreement_matrix, generate_model_score_matrix, identify_high_variance_items
+        from analytics import calculate_fmea_variance, generate_disagreement_matrix, generate_model_score_matrix, identify_high_variance_items
         
         if 'comparison_results' in st.session_state:
             results = st.session_state['comparison_results']
