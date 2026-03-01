@@ -5,7 +5,7 @@ Orchestrates the complete FMEA generation pipeline
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 from pathlib import Path
 import logging
 from datetime import datetime
@@ -13,6 +13,7 @@ from datetime import datetime
 from preprocessing import DataPreprocessor
 from llm_extractor import LLMExtractor
 from risk_scoring import RiskScoringEngine
+from multi_model_comparison import MultiModelComparator
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,158 @@ class FMEAGenerator:
         self.scorer = RiskScoringEngine(config)
         
         logger.info("FMEA Generator initialized successfully")
+    
+    def generate_multi_model_comparison(self, 
+                                       text_input: Union[str, List[str]],
+                                       model_names: List[str],
+                                       is_file: bool = False) -> Dict[str, Any]:
+        """
+        Generate FMEA from multiple models and compare results
+        
+        Args:
+            text_input: File path or list of text strings
+            model_names: List of model names to use for comparison
+            is_file: Whether text_input is a file path
+            
+        Returns:
+            Dictionary containing:
+            {
+                'individual_results': Dict[model_name -> FMEA DataFrame],
+                'comparison_results': Comprehensive comparison data from MultiModelComparator
+            }
+        """
+        logger.info(f"Generating FMEA from {len(model_names)} models for comparison...")
+        
+        if len(model_names) < 2:
+            raise ValueError("Need at least 2 models for comparison")
+        
+        # Step 1: Preprocess text (shared across all models)
+        if is_file:
+            preprocessed_df = self.preprocessor.load_unstructured_data(file_path=text_input)
+        else:
+            preprocessed_df = self.preprocessor.load_unstructured_data(text_data=text_input)
+        
+        texts = preprocessed_df['text_cleaned'].tolist()
+        
+        # Step 2: Generate FMEA for each model
+        individual_results = {}
+        original_model = self.config['model']['name']
+        
+        try:
+            import copy
+            for model_name in model_names:
+                logger.info(f"Generating FMEA for model: {model_name}")
+                # Deep copy config for thread safety
+                model_config = copy.deepcopy(self.config)
+                model_config['model']['name'] = model_name
+                # Create new extractor with deep-copied config
+                temp_extractor = LLMExtractor(model_config)
+                # Extract failure information using this model
+                extracted_info = temp_extractor.batch_extract(texts)
+                extracted_df = pd.DataFrame(extracted_info)
+                # Add original text for reference
+                extracted_df['original_text'] = preprocessed_df['text'].values
+                extracted_df['sentiment'] = preprocessed_df['sentiment'].values
+                # Calculate risk scores
+                fmea_df = self.scorer.batch_score(extracted_df)
+                # Generate recommendations
+                fmea_df = self._generate_recommendations(fmea_df)
+                # Format output
+                fmea_df = self._format_output(fmea_df)
+                individual_results[model_name] = fmea_df
+                logger.info(f"Generated FMEA for {model_name} with {len(fmea_df)} entries")
+        
+        finally:
+            # Restore original model
+            self.config['model']['name'] = original_model
+            self.extractor = LLMExtractor(self.config)
+        
+        # Step 3: Compare results from all models
+        comparator = MultiModelComparator(self.config)
+        comparison_results = comparator.compare_models(individual_results)
+        
+        logger.info("Multi-model comparison completed successfully")
+        
+        return {
+            'individual_results': individual_results,
+            'comparison_results': comparison_results
+        }
+    
+    def generate_multi_model_from_structured(self,
+                                            file_path: str,
+                                            model_names: List[str]) -> Dict[str, Any]:
+        """
+        Generate FMEA from structured data using multiple models
+        
+        Args:
+            file_path: Path to CSV or Excel file
+            model_names: List of model names to use for comparison
+            
+        Returns:
+            Dictionary containing individual results and comparison data
+        """
+        logger.info(f"Generating FMEA from structured file using {len(model_names)} models...")
+        
+        if len(model_names) < 2:
+            raise ValueError("Need at least 2 models for comparison")
+        
+        # Load and validate structured data (shared across all models)
+        structured_df = self.preprocessor.load_structured_data(file_path)
+        
+        # Check if risk scores already exist
+        has_scores = all(col in structured_df.columns 
+                        for col in ['severity', 'occurrence', 'detection'])
+        
+        individual_results = {}
+        original_model = self.config['model']['name']
+        
+        try:
+            import copy
+            for model_name in model_names:
+                logger.info(f"Processing structured data for model: {model_name}")
+                # Deep copy config for thread safety
+                model_config = copy.deepcopy(self.config)
+                model_config['model']['name'] = model_name
+                fmea_df = structured_df.copy()
+                if not has_scores:
+                    # For comparison, we use the same scorer for all models
+                    # The difference would come from different extracted failure modes
+                    fmea_df = self.scorer.batch_score(fmea_df)
+                else:
+                    # Recalculate RPN with updated config settings
+                    fmea_df['rpn'] = fmea_df.apply(
+                        lambda row: self.scorer.calculate_rpn(
+                            row['severity'], row['occurrence'], row['detection']
+                        ), axis=1
+                    )
+                    fmea_df['action_priority'] = fmea_df.apply(
+                        lambda row: self.scorer.calculate_action_priority(
+                            row['severity'], row['occurrence'], row['detection']
+                        ), axis=1
+                    )
+                # Generate recommendations
+                fmea_df = self._generate_recommendations(fmea_df)
+                # Format output
+                fmea_df = self._format_output(fmea_df)
+                individual_results[model_name] = fmea_df
+                logger.info(f"Processed structured data for {model_name} with {len(fmea_df)} entries")
+        
+        finally:
+            # Restore original model
+            self.config['model']['name'] = original_model
+            self.extractor = LLMExtractor(self.config)
+        
+        # Compare results from all models
+        comparator = MultiModelComparator(self.config)
+        comparison_results = comparator.compare_models(individual_results)
+        
+        logger.info("Multi-model comparison from structured data completed successfully")
+        
+        return {
+            'individual_results': individual_results,
+            'comparison_results': comparison_results
+        }
+
     
     def generate_from_text(self, text_input: Union[str, List[str]], 
                           is_file: bool = False) -> pd.DataFrame:
