@@ -43,6 +43,7 @@ class LLMExtractor:
         self.model = None
         self.tokenizer = None
         self.pipeline = None
+        self._current_model_name = None
 
         self._load_model()
 
@@ -58,13 +59,33 @@ class LLMExtractor:
         model_name = self.model_config.get(
             "name", "mistralai/Mistral-7B-Instruct-v0.2"
         )
+        self._load_specific_model(model_name)
+
+    def _load_specific_model(self, model_name: str):
+        """Load a specific model by name, safely switching from the current one."""
+        if self._current_model_name == model_name and self.pipeline is not None:
+            logger.info(f"Model '{model_name}' already loaded, skipping reload.")
+            return
 
         if not self._validate_model_name(model_name):
             logger.error(f"Model '{model_name}' not trusted. Using rule-based extraction.")
             self.pipeline = None
+            self._current_model_name = None
             return
 
         logger.info(f"Loading model: {model_name}")
+
+        # Cleanup previous model to free memory
+        if self.model is not None:
+            del self.model
+            self.model = None
+        if self.tokenizer is not None:
+            del self.tokenizer
+            self.tokenizer = None
+        if self.pipeline is not None:
+            del self.pipeline
+            self.pipeline = None
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
         try:
             # Quantization
@@ -112,10 +133,56 @@ class LLMExtractor:
             )
 
             logger.info(f"Model loaded successfully on {device}")
+            self._current_model_name = model_name
 
         except Exception as e:
             logger.error(f"Model loading error: {e}")
             self.pipeline = None
+            self._current_model_name = None
+
+    # ---------------- MULTI-MODEL EXTRACTION ---------------- #
+
+    def extract_with_multiple_models(self, text: str, models_list: List[str]) -> Dict[str, Dict[str, str]]:
+        """
+        Extract failure info from the same text using multiple LLMs.
+        
+        Args:
+            text: Input text to analyze
+            models_list: List of model names to use
+            
+        Returns:
+            Dict mapping model_name -> extracted failure info dict
+        """
+        results = {}
+        for model_name in models_list:
+            try:
+                self._load_specific_model(model_name)
+                results[model_name] = self.extract_failure_info(text)
+            except Exception as e:
+                logger.error(f"Extraction failed for model '{model_name}': {e}")
+                results[model_name] = self._rule_based_extraction(text)
+        return results
+
+    def batch_extract_with_multiple_models(self, texts: List[str], models_list: List[str]) -> Dict[str, List[Dict[str, str]]]:
+        """
+        Batch extract failure info from multiple texts using multiple LLMs.
+        
+        Args:
+            texts: List of input texts
+            models_list: List of model names to use
+            
+        Returns:
+            Dict mapping model_name -> list of extracted failure info dicts
+        """
+        results = {}
+        for model_name in models_list:
+            try:
+                self._load_specific_model(model_name)
+                results[model_name] = self.batch_extract(texts)
+            except Exception as e:
+                logger.error(f"Batch extraction failed for model '{model_name}': {e}")
+                results[model_name] = [self._rule_based_extraction(t) for t in texts]
+        return results
 
     # ---------------- EXTRACTION ---------------- #
 

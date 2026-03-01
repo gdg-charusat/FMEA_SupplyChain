@@ -19,13 +19,13 @@ import io
 # Add src directory to path
 sys.path.append(str(Path(__file__).parent / 'src'))
 
-from fmea_generator import FMEAGenerator
-from preprocessing import DataPreprocessor
-from llm_extractor import LLMExtractor
-from risk_scoring import RiskScoringEngine
-from ocr_processor import OCRProcessor
-from history_tracker import FMEAHistoryTracker
-from voice_input import VoiceInputProcessor
+from src.fmea_generator import FMEAGenerator
+from src.preprocessing import DataPreprocessor
+from src.llm_extractor import LLMExtractor
+from src.risk_scoring import RiskScoringEngine
+from src.ocr_processor import OCRProcessor
+from src.history_tracker import FMEAHistoryTracker
+from src.voice_input import VoiceInputProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -477,7 +477,8 @@ def main():
         st.markdown("### 📊 Input Options")
         input_type = st.radio(
             "Select Input Type:",
-            ["Unstructured Text", "Structured File (CSV/Excel)", "Hybrid (Both)", "📷 Scan Document (OCR)", "🎙️ Voice Input"]
+            ["Unstructured Text", "Structured File (CSV/Excel)", "Hybrid (Both)", "📷 Scan Document (OCR)", "🎙️ Voice Input"],
+            key="input_type_radio"
         )
         
         st.markdown("---")
@@ -527,13 +528,13 @@ def main():
         """)
     
     # Main content area
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📝 Generate FMEA", 
         "🎯 PFMEA Generator", 
         "🚚 Supply Chain Risk",
         "🔄 Model Comparison",
         "📊 Analytics", 
-        "📊 Analytics",
+        "🔍 Disagreement Heatmap",
         "📈 History & Trends",
         "ℹ️ Help"
     ])
@@ -576,7 +577,8 @@ def main():
         if input_type == "Unstructured Text":
             text_input_method = st.radio(
                 "Input Method:",
-                ["Upload File", "Enter Text Manually"]
+                ["Upload File", "Enter Text Manually"],
+                key="text_input_method_radio_1"
             )
             
             if text_input_method == "Upload File":
@@ -584,111 +586,58 @@ def main():
                     "Upload a text document (TXT, DOC, DOCX, PDF)",
                     type=['txt', 'doc', 'docx', 'pdf'],
                     help=f"Supported formats: TXT, DOC, DOCX, PDF. Max size: {MAX_FILE_SIZE_MB} MB."
-                    "Upload image file (PNG, JPEG) - OCR will extract text",
-                    type=['png', 'jpg', 'jpeg'],
-                    help=f"Supported formats: PNG, JPG, JPEG. Max size: {MAX_FILE_SIZE_MB} MB."
                 )
-                
                 if uploaded_file:
-                    # Validate uploaded file
                     is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_TEXT_TYPES)
                     if not is_valid:
                         st.error(error_msg)
                         st.stop()
-                    is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_IMAGE_TYPES)
-                    if not is_valid:
-                        st.error(error_msg)
+                    show_file_info(uploaded_file)
+                    file_name = uploaded_file.name.lower()
+                    try:
+                        if file_name.endswith('.txt'):
+                            extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
+                        elif file_name.endswith('.pdf'):
+                            import PyPDF2, io
+                            reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.getvalue()))
+                            extracted_text = "\n".join(
+                                page.extract_text() or "" for page in reader.pages
+                            )
+                        elif file_name.endswith(('.doc', '.docx')):
+                            import docx, io
+                            doc = docx.Document(io.BytesIO(uploaded_file.getvalue()))
+                            extracted_text = "\n".join(
+                                para.text for para in doc.paragraphs
+                            )
+                        else:
+                            extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
+                    except Exception as e:
+                        st.error(f"Error reading file: {e}")
+                        extracted_text = ""
+                    if not extracted_text or not extracted_text.strip():
+                        st.error("⚠️ Failed to extract any readable text from the file. Please upload a clearer file.")
                         st.stop()
-                    
-                    show_file_info(uploaded_file)
-
-                    # Display uploaded image
-                    col1, col2 = st.columns([1, 2]]      
-
-                    show_file_info(uploaded_file)
-
-                    if st.button("🚀 Read File & Generate FMEA", type="primary"):
-                        with st.spinner("Reading text from file..."):
-                            file_name = uploaded_file.name.lower()
-                            try:
-                                if file_name.endswith('.txt'):
-                                    extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
-                                elif file_name.endswith('.pdf'):
-                                    import PyPDF2, io
-                                    reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.getvalue()))
-                                    extracted_text = "\n".join(
-                                        page.extract_text() or "" for page in reader.pages
-                                    )
-                                elif file_name.endswith(('.doc', '.docx')):
-                                    import docx, io
-                                    doc = docx.Document(io.BytesIO(uploaded_file.getvalue()))
-                                    extracted_text = "\n".join(
-                                        para.text for para in doc.paragraphs
-                                    )
-                    with col1:
-                        st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
-                    
-                    with col2:
-                        if st.button("🚀 Extract Text & Generate FMEA", type="primary"):
-                            with st.spinner("Extracting text from image..."):
-                                # Extract text using OCR
-                                extracted_text = extract_text_from_image(uploaded_file)
-                                
-                                # Show extracted text
-                                st.markdown("**Extracted Text:**")
-                                st.text_area("", extracted_text, height=150, key="extracted", disabled=True)
-                                
-                                # Validate OCR output
-                                if not extracted_text or not extracted_text.strip():
-                                    st.error("⚠️ OCR failed to extract any readable text from the image. Please upload a clearer image.")
-                                    st.stop()
-                                elif "Error" in extracted_text or "No text found" in extracted_text:
-                                    st.error(extracted_text)
-                                    st.stop()
-                                else:
-                                    with st.spinner("Generating FMEA from extracted text..."):
-                                        generator = initialize_generator(config)
-                                        # Split text into lines
-                                        texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
-                                        if not texts:
-                                            st.error("⚠️ OCR extracted text contains no usable content. Please try a different image.")
-                                            st.stop()
-                                        fmea_df = generator.generate_from_text(texts, is_file=False)
-                                        st.session_state['fmea_df'] = fmea_df
-                else:
-                    st.info("📤 Please upload an image file (PNG, JPG, JPEG) to begin.")
-                                        st.session_state['fmea_saved'] = False
-                                else:
-                                    extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
-                            except Exception as e:
-                                st.error(f"⚠️ Failed to read file: {e}")
+                    elif "Error" in extracted_text or "No text found" in extracted_text:
+                        st.error(extracted_text)
+                        st.stop()
+                    else:
+                        with st.spinner("Generating FMEA from extracted text..."):
+                            generator = initialize_generator(config)
+                            texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
+                            if not texts:
+                                st.error("⚠️ Extracted text contains no usable content. Please try a different file.")
                                 st.stop()
-                            
-                            # Show extracted text
-                            st.markdown("**Extracted Text:**")
-                            st.text_area("", extracted_text, height=150, key="extracted", disabled=True)
-                            
-                            if not extracted_text or not extracted_text.strip():
-                                st.error("⚠️ The file contains no readable text. Please upload a different file.")
-                                st.stop()
-                            else:
-                                with st.spinner("Generating FMEA from text..."):
-                                    generator = initialize_generator(config)
-                                    texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
-                                    if not texts:
-                                        st.error("⚠️ No usable text content found in the file. Please try a different file.")
-                                        st.stop()
-                                    fmea_df = generator.generate_from_text(texts, is_file=False)
-                                    st.session_state['fmea_df'] = fmea_df
+                            fmea_df = generator.generate_from_text(texts, is_file=False)
+                            st.session_state['fmea_df'] = fmea_df
+                            st.session_state['fmea_saved'] = False
                 else:
-                    st.info("📤 Please upload a text document (TXT, DOC, DOCX, PDF) to begin.")
-            else:
+                    st.info("📤 Please upload a text document (TXT, DOC, DOCX, PDF) to begin or enter text below.")
+            elif text_input_method == "Enter Text Manually":
                 text_input = st.text_area(
                     "Enter text (reviews, reports, complaints):",
                     height=200,
                     placeholder="Paste customer reviews, failure reports, or complaint text here..."
                 )
-                
                 generate_btn = st.button("🚀 Generate FMEA", type="primary")
                 if generate_btn:
                     if not text_input or not text_input.strip():
@@ -703,6 +652,7 @@ def main():
                         fmea_df = generator.generate_from_text(texts, is_file=False)
                         st.session_state['fmea_df'] = fmea_df
                         st.session_state['fmea_saved'] = False
+
 
         elif input_type == "📷 Scan Document (OCR)":
             st.markdown("**Upload an image or PDF for OCR extraction:**")
@@ -778,12 +728,10 @@ def main():
                             st.session_state['fmea_df'] = fmea_df
             else:
                 st.info("📤 Please upload an image or PDF document for OCR extraction.")
-                            st.session_state['fmea_saved'] = False
-        
+
         elif input_type == "🎙️ Voice Input":
             st.markdown("**🎙️ Record your failure description:**")
             st.info("Click the microphone button below, speak your failure description clearly, then click stop.")
-
             try:
                 from audio_recorder_streamlit import audio_recorder
                 audio_bytes = audio_recorder(
@@ -795,12 +743,8 @@ def main():
             except ImportError:
                 st.error("Audio recorder component not installed. Run: pip install audio-recorder-streamlit")
                 audio_bytes = None
-
             if audio_bytes:
-                # Show audio playback
                 st.audio(audio_bytes, format="audio/wav")
-
-                # Transcribe with Whisper
                 whisper_size = st.session_state.get('whisper_model_size', 'base')
                 with st.spinner(f"Transcribing audio with Whisper ({whisper_size} model)..."):
                     try:
@@ -809,10 +753,7 @@ def main():
                     except Exception as e:
                         st.error(f"Transcription failed: {e}")
                         transcribed_text = ""
-
-                # Validate transcription
                 validation = processor.validate_transcription(transcribed_text)
-
                 if validation["valid"]:
                     edited_text = st.text_area(
                         "Review and correct transcription before generating FMEA:",
@@ -820,7 +761,6 @@ def main():
                         height=150,
                         key="voice_transcription"
                     )
-
                     if st.button("🚀 Generate FMEA from Voice Input", type="primary"):
                         if not edited_text or not edited_text.strip():
                             st.error("⚠️ Transcription text is empty. Please record again with a clear description.")
@@ -833,6 +773,7 @@ def main():
                             generator = initialize_generator(config)
                             fmea_df = generator.generate_from_text(texts, is_file=False)
                             st.session_state['fmea_df'] = fmea_df
+                            st.session_state['fmea_saved'] = False
                 else:
                     st.error(f"⚠️ {validation['reason']}")
                     st.warning("Please record again with a clear, longer description.")
@@ -843,51 +784,41 @@ def main():
                 type=['csv', 'xlsx', 'xls'],
                 help=f"Supported formats: CSV, XLSX, XLS. Max size: {MAX_FILE_SIZE_MB} MB."
             )
-            
             if uploaded_file:
-                # Validate uploaded file
                 is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_STRUCTURED_TYPES)
                 if not is_valid:
                     st.error(error_msg)
                     st.stop()
-                
                 show_file_info(uploaded_file)
-
-                # Validate file content (not empty data)
                 try:
                     file_ext = uploaded_file.name.split('.')[-1].lower()
                     if file_ext == 'csv':
                         check_df = pd.read_csv(uploaded_file)
                     else:
                         check_df = pd.read_excel(uploaded_file)
-                    uploaded_file.seek(0)  # Reset file pointer after reading
+                    uploaded_file.seek(0)
                     if check_df.empty or len(check_df) == 0:
                         st.error("⚠️ The uploaded file contains no data rows. Please upload a file with valid data.")
                         st.stop()
                 except Exception as e:
                     st.error(f"⚠️ Unable to read the file. It may be corrupted or in an unexpected format. Error: {e}")
                     st.stop()
-
                 temp_path = Path(f"temp_{uploaded_file.name}")
                 with open(temp_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
-                
                 if st.button("🚀 Generate FMEA", type="primary"):
                     with st.spinner("Processing structured data..."):
                         generator = initialize_generator(config)
                         fmea_df = generator.generate_from_structured(str(temp_path))
                         st.session_state['fmea_df'] = fmea_df
                         st.session_state['fmea_saved'] = False
-                    
                     temp_path.unlink()
             else:
                 st.info("📤 Please upload a CSV or Excel file to begin.")
-        
-        else:  # Hybrid
+
+        elif input_type == "Hybrid (Both)":
             st.markdown("**Upload both structured and unstructured data:**")
-            
             col1, col2 = st.columns(2)
-            
             with col1:
                 st.markdown("**Structured Data:**")
                 structured_file = st.file_uploader(
@@ -896,7 +827,6 @@ def main():
                     key='structured',
                     help=f"Supported formats: CSV, XLSX, XLS. Max size: {MAX_FILE_SIZE_MB} MB."
                 )
-            
             with col2:
                 st.markdown("**Unstructured Data:**")
                 unstructured_text = st.text_area(
@@ -905,7 +835,6 @@ def main():
                     placeholder="Paste customer reviews, failure reports, or complaint text here...",
                     key='hybrid_text'
                 )
-            
             generate_hybrid_btn = st.button("🚀 Generate Hybrid FMEA", type="primary")
             if generate_hybrid_btn:
                 # Validate that at least one valid input is provided
@@ -1771,7 +1700,7 @@ def main():
         st.markdown("Compare FMEA outputs from multiple LLMs side-by-side")
         
         # Import comparison module
-        from multi_model_comparison import MultiModelComparator, ComparisonVisualizationHelper
+        from src.multi_model_comparison import MultiModelComparator, ComparisonVisualizationHelper
         
         st.markdown("### 🎯 Model Selection & Input")
         
@@ -1793,7 +1722,8 @@ def main():
         # Input method
         comparison_input_type = st.radio(
             "Input Type:",
-            ["Text Input", "Structured File (CSV/Excel)"]
+            ["Text Input", "Structured File (CSV/Excel)"],
+            key="comparison_input_type_radio"
         )
         
         comparison_input_data = None
@@ -2220,7 +2150,145 @@ def main():
         else:
             st.info("Generate an FMEA first to see analytics.")
    
-    with tab5:
+    with tab6:
+        st.markdown('<div class="sub-header">🔍 Multi-Model Disagreement Heatmap & Variance Analysis</div>', unsafe_allow_html=True)
+        st.markdown("Visualize where different LLMs disagree on FMEA scoring and identify low-confidence areas.")
+        
+        import plotly.express as px
+        from src.analytics import calculate_fmea_variance, generate_disagreement_matrix, generate_model_score_matrix, identify_high_variance_items
+        
+        if 'comparison_results' in st.session_state:
+            results = st.session_state['comparison_results']
+            individual_results = results.get('individual_results', {})
+            model_names_list = list(individual_results.keys())
+            
+            if len(model_names_list) >= 2:
+                metrics_list = ["Severity", "Occurrence", "Detection", "RPN"]
+                
+                # --- Disagreement Heatmap ---
+                st.subheader("🔍 Model Disagreement Heatmap")
+                st.markdown("Cell values represent the **standard deviation** across models. Higher values (red) = more disagreement.")
+                
+                disagreement_df = generate_disagreement_matrix(individual_results, metrics=metrics_list)
+                
+                if not disagreement_df.empty:
+                    fig_heatmap = px.imshow(
+                        disagreement_df,
+                        labels=dict(x="FMEA Metric", y="Failure Mode", color="Std Dev"),
+                        aspect="auto",
+                        color_continuous_scale="RdYlGn_r",
+                        title="Model Disagreement Heatmap (Std Dev across LLMs)"
+                    )
+                    fig_heatmap.update_layout(height=max(400, len(disagreement_df) * 35))
+                    st.plotly_chart(fig_heatmap, use_container_width=True)
+                else:
+                    st.warning("Could not generate disagreement matrix from available data.")
+                
+                st.markdown("---")
+                
+                # --- Per-Metric Score Heatmaps ---
+                st.subheader("📊 Per-Metric Model Score Heatmaps")
+                selected_metric = st.selectbox(
+                    "Select metric to visualize:",
+                    metrics_list,
+                    key="heatmap_metric_select"
+                )
+                
+                score_matrix = generate_model_score_matrix(individual_results, metric=selected_metric)
+                if not score_matrix.empty:
+                    fig_scores = px.imshow(
+                        score_matrix,
+                        labels=dict(x="LLM Model", y="Failure Mode", color=f"{selected_metric} Score"),
+                        aspect="auto",
+                        color_continuous_scale="RdYlGn_r",
+                        title=f"{selected_metric} Scores by Model"
+                    )
+                    fig_scores.update_layout(height=max(400, len(score_matrix) * 35))
+                    st.plotly_chart(fig_scores, use_container_width=True)
+                
+                st.markdown("---")
+                
+                # --- Variance Analysis Table ---
+                st.subheader("📊 Variance Analysis")
+                st.markdown("Fields with **high variance** (red) indicate **low AI confidence** — models disagree significantly.")
+                
+                variance_df = calculate_fmea_variance(individual_results, metrics=metrics_list)
+                
+                if not variance_df.empty:
+                    # Display styled variance table
+                    display_cols = ["failure_mode"]
+                    style_cols = []
+                    for m in metrics_list:
+                        display_cols.extend([f"{m}_mean", f"{m}_std", f"{m}_range"])
+                        style_cols.extend([f"{m}_std", f"{m}_range"])
+                    
+                    display_df = variance_df[display_cols].copy()
+                    display_df.columns = [c.replace("_", " ").title() for c in display_cols]
+                    
+                    styled = display_df.style.background_gradient(
+                        cmap='Reds',
+                        subset=[c.replace("_", " ").title() for c in style_cols]
+                    )
+                    st.dataframe(styled, use_container_width=True, height=400)
+                    
+                    st.markdown("---")
+                    
+                    # --- High Variance Items ---
+                    st.subheader("🔴 High-Variance Failure Modes")
+                    variance_threshold = st.slider(
+                        "Std Dev Threshold for flagging high variance:",
+                        min_value=0.5, max_value=5.0, value=2.0, step=0.5,
+                        key="variance_threshold_slider"
+                    )
+                    
+                    high_var_items = identify_high_variance_items(variance_df, threshold_std=variance_threshold, metric="RPN")
+                    
+                    if not high_var_items.empty:
+                        st.warning(f"⚠️ {len(high_var_items)} failure mode(s) exceed the RPN std dev threshold of {variance_threshold}.")
+                        for _, row in high_var_items.iterrows():
+                            with st.expander(f"**{row['failure_mode']}** — RPN Std: {row['RPN_std']:.2f}, Range: {row['RPN_range']:.0f}"):
+                                col1, col2, col3, col4 = st.columns(4)
+                                with col1:
+                                    st.metric("Severity Std", f"{row['Severity_std']:.2f}")
+                                with col2:
+                                    st.metric("Occurrence Std", f"{row['Occurrence_std']:.2f}")
+                                with col3:
+                                    st.metric("Detection Std", f"{row['Detection_std']:.2f}")
+                                with col4:
+                                    st.metric("RPN Std", f"{row['RPN_std']:.2f}")
+                                st.markdown(f"**Mean Scores:** Severity={row['Severity_mean']:.1f}, Occurrence={row['Occurrence_mean']:.1f}, Detection={row['Detection_mean']:.1f}, RPN={row['RPN_mean']:.1f}")
+                    else:
+                        st.success(f"✅ No failure modes exceed the RPN std dev threshold of {variance_threshold}. Models are in reasonable agreement.")
+                    
+                    st.markdown("---")
+                    
+                    # --- Export Variance Data ---
+                    st.subheader("💾 Export Variance Analysis")
+                    csv_variance = variance_df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download Variance Analysis (CSV)",
+                        data=csv_variance,
+                        file_name=f"variance_analysis_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        key="download_variance_csv"
+                    )
+                    
+                    csv_disagreement = disagreement_df.to_csv()
+                    st.download_button(
+                        label="📥 Download Disagreement Matrix (CSV)",
+                        data=csv_disagreement,
+                        file_name=f"disagreement_matrix_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        key="download_disagreement_csv"
+                    )
+                else:
+                    st.warning("Could not compute variance from available data.")
+            else:
+                st.info("Need at least 2 model results for disagreement analysis. Go to the **🔄 Model Comparison** tab and run a comparison first.")
+        else:
+            st.info("👆 No comparison data available yet. Go to the **🔄 Model Comparison** tab, select 2+ models, and generate a comparison to see the disagreement heatmap and variance analysis here.")
+
+    with tab7:
         st.markdown('<div class="sub-header">📈 History & Trends</div>', unsafe_allow_html=True)
         
         tracker = FMEAHistoryTracker("history")
@@ -2378,7 +2446,7 @@ def main():
             ])
             
             st.dataframe(runs_df, use_container_width=True, hide_index=True)
-    with tab6:
+    with tab8:
         st.markdown('<div class="sub-header">Help & Documentation</div>', unsafe_allow_html=True)
         
         st.markdown("""

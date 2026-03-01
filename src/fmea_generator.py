@@ -14,6 +14,7 @@ from preprocessing import DataPreprocessor
 from llm_extractor import LLMExtractor
 from risk_scoring import RiskScoringEngine
 from multi_model_comparison import MultiModelComparator
+from analytics import calculate_fmea_variance, generate_disagreement_matrix, generate_model_score_matrix
 
 logger = logging.getLogger(__name__)
 
@@ -519,6 +520,72 @@ class FMEAGenerator:
         else:  # CSV
             fmea_df.to_csv(output_path, index=False)
             logger.info(f"FMEA exported to CSV: {output_path}")
+
+    def generate_comparison_report(self, text_input: Union[str, List[str]],
+                                    models: Optional[List[str]] = None,
+                                    is_file: bool = False) -> Dict[str, Any]:
+        """
+        Generate FMEA comparison report with variance analysis and disagreement matrix.
+        
+        Uses the comparison_mode config or explicit models list to run multiple LLMs
+        on the same input and compute variance/disagreement analytics.
+        
+        Args:
+            text_input: File path or list of text strings
+            models: List of model names (overrides config if provided)
+            is_file: Whether text_input is a file path
+            
+        Returns:
+            Dictionary containing:
+            {
+                'individual_results': Dict[model_name -> FMEA DataFrame],
+                'comparison_results': Comparison data from MultiModelComparator,
+                'variance_df': Variance analysis DataFrame,
+                'disagreement_matrix': Disagreement heatmap matrix,
+                'score_matrices': Dict[metric -> model score matrix DataFrame]
+            }
+        """
+        if models is None:
+            models = self.config.get('comparison_mode', {}).get('models', [])
+        
+        if len(models) < 2:
+            raise ValueError("Need at least 2 models for comparison report")
+        
+        metrics_to_compare = self.config.get('comparison_mode', {}).get(
+            'metrics_to_compare', ["Severity", "Occurrence", "Detection", "RPN"]
+        )
+        
+        logger.info(f"Generating comparison report with {len(models)} models...")
+        
+        # Step 1: Generate multi-model comparison (reuse existing method)
+        multi_results = self.generate_multi_model_comparison(
+            text_input=text_input,
+            model_names=models,
+            is_file=is_file
+        )
+        
+        individual_results = multi_results['individual_results']
+        
+        # Step 2: Calculate variance across models
+        variance_df = calculate_fmea_variance(individual_results, metrics=metrics_to_compare)
+        
+        # Step 3: Generate disagreement matrix for heatmap
+        disagreement_mat = generate_disagreement_matrix(individual_results, metrics=metrics_to_compare)
+        
+        # Step 4: Generate per-metric score matrices
+        score_matrices = {}
+        for metric in metrics_to_compare:
+            score_matrices[metric] = generate_model_score_matrix(individual_results, metric=metric)
+        
+        logger.info("Comparison report generated successfully")
+        
+        return {
+            'individual_results': individual_results,
+            'comparison_results': multi_results['comparison_results'],
+            'variance_df': variance_df,
+            'disagreement_matrix': disagreement_mat,
+            'score_matrices': score_matrices,
+        }
 
 
 if __name__ == "__main__":

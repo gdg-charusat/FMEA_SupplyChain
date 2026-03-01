@@ -139,6 +139,15 @@ model_comparison:
     - "meta-llama/Llama-2-7b-chat-hf"
     - "gpt2"
     - "Rule-based (No LLM)"
+# Comparison Mode Settings (Multi-Model Disagreement Heatmap & Variance)
+comparison_mode:
+  enabled: true
+  models:
+    - "mistralai/Mistral-7B-Instruct-v0.2"
+    - "meta-llama/Llama-2-7b-chat-hf"
+    - "google/flan-t5-large"
+  metrics_to_compare: ["Severity", "Occurrence", "Detection", "Rpn"]
+
 # Voice Input Settings
 voice_input:
   enabled: true
