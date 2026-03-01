@@ -21,8 +21,11 @@ import yaml
 def config():
     """Load test configuration"""
     config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
-    with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+    try:
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        pytest.fail(f"Failed to load test configuration from {config_path}: {e}")
 
 
 @pytest.fixture
