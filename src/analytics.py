@@ -451,7 +451,8 @@ def generate_radar_chart(multi_model_results: Dict[str, pd.DataFrame],
     Generate an interactive Plotly radar (spider) chart comparing models.
 
     Each model is a trace.  Axes: Severity, Occurrence, Detection, RPN (scaled),
-    Consistency.
+    Consistency.  All values are normalized to a 0-10 scale so that axes with
+    different native ranges are visually comparable.
     """
     radar_data = prepare_radar_data(multi_model_results)
     if not radar_data:
@@ -461,6 +462,18 @@ def generate_radar_chart(multi_model_results: Dict[str, pd.DataFrame],
         return fig
 
     categories = ['Severity', 'Occurrence', 'Detection', 'RPN (scaled)', 'Consistency']
+
+    # Compute per-axis min/max for normalization
+    raw_keys = ['Severity', 'Occurrence', 'Detection', 'RPN', 'Consistency']
+    axis_max = {}
+    axis_min = {}
+    for i, key in enumerate(raw_keys):
+        vals = [e.get(key, 0) for e in radar_data]
+        axis_max[key] = max(vals) if vals else 1
+        axis_min[key] = min(vals) if vals else 0
+        if axis_max[key] == axis_min[key]:
+            axis_max[key] = axis_min[key] + 1  # avoid division by zero
+
     # Color palette (up to 8 models)
     colors = [
         'rgba(31, 119, 180, 0.7)',   # blue
@@ -478,37 +491,46 @@ def generate_radar_chart(multi_model_results: Dict[str, pd.DataFrame],
     for idx, entry in enumerate(radar_data):
         color = colors[idx % len(colors)]
         fill_color = color.replace('0.7', '0.15')
-        values = [
+        raw_values = [
             entry.get('Severity', 0),
             entry.get('Occurrence', 0),
             entry.get('Detection', 0),
             entry.get('RPN', 0),
             entry.get('Consistency', 0),
         ]
+        # Normalize each axis to 0-10 for visual comparability
+        norm_values = []
+        for i, key in enumerate(raw_keys):
+            v = raw_values[i]
+            norm_values.append(round(10 * (v - axis_min[key]) / (axis_max[key] - axis_min[key]), 2))
+
         # Close the polygon
-        values_closed = values + [values[0]]
+        norm_closed = norm_values + [norm_values[0]]
         cats_closed = categories + [categories[0]]
 
+        # Build hover text with actual values
+        hover_texts = [
+            f"<b>{categories[i]}</b><br>Normalized: {norm_values[i]:.1f}/10<br>Actual: {raw_values[i]:.2f}"
+            for i in range(len(categories))
+        ]
+        hover_texts.append(hover_texts[0])
+
         fig.add_trace(go.Scatterpolar(
-            r=values_closed,
+            r=norm_closed,
             theta=cats_closed,
             fill='toself',
             fillcolor=fill_color,
             line=dict(color=color, width=2),
             name=entry['model'],
-            hovertemplate='<b>%{theta}</b>: %{r:.2f}<extra>' + entry['model'] + '</extra>',
+            text=hover_texts,
+            hoverinfo='text+name',
         ))
 
     fig.update_layout(
         polar=dict(
             radialaxis=dict(
                 visible=True,
-                range=[0, max(10, max(
-                    max(e.get('Severity', 0), e.get('Occurrence', 0),
-                        e.get('Detection', 0), e.get('RPN', 0) * 100,
-                        e.get('Consistency', 0))
-                    for e in radar_data
-                ) * 1.1)],
+                range=[0, 10],
                 tickfont_size=10,
             ),
             angularaxis=dict(tickfont_size=12),

@@ -1978,57 +1978,88 @@ def main():
                         o_col = f'{model}_occurrence'
                         d_col = f'{model}_detection'
                         r_col = f'{model}_rpn'
-                        s_vals = comparison_df[s_col].dropna() if s_col in comparison_df else []
-                        o_vals = comparison_df[o_col].dropna() if o_col in comparison_df else []
-                        d_vals = comparison_df[d_col].dropna() if d_col in comparison_df else []
-                        rpn_vals = comparison_df[r_col].dropna() if r_col in comparison_df else []
-                        crit_count = (rpn_vals >= 250).sum() if len(rpn_vals) > 0 else 0
+                        s_vals = comparison_df[s_col].dropna() if s_col in comparison_df else pd.Series(dtype=float)
+                        o_vals = comparison_df[o_col].dropna() if o_col in comparison_df else pd.Series(dtype=float)
+                        d_vals = comparison_df[d_col].dropna() if d_col in comparison_df else pd.Series(dtype=float)
+                        rpn_vals = comparison_df[r_col].dropna() if r_col in comparison_df else pd.Series(dtype=float)
+                        crit_count = int((rpn_vals >= 250).sum()) if len(rpn_vals) > 0 else 0
                         radar_metrics[model] = {
-                            'Severity': float(s_vals.mean()) if len(s_vals) > 0 else 0,
-                            'Occurrence': float(o_vals.mean()) if len(o_vals) > 0 else 0,
-                            'Detection': float(d_vals.mean()) if len(d_vals) > 0 else 0,
-                            'RPN': float(rpn_vals.mean()) if len(rpn_vals) > 0 else 0,
-                            'Critical Risks': int(crit_count),
+                            'Avg Severity': float(s_vals.mean()) if len(s_vals) > 0 else 0,
+                            'Avg Occurrence': float(o_vals.mean()) if len(o_vals) > 0 else 0,
+                            'Avg Detection': float(d_vals.mean()) if len(d_vals) > 0 else 0,
+                            'Avg RPN': float(rpn_vals.mean()) if len(rpn_vals) > 0 else 0,
+                            'Critical Risks': crit_count,
                         }
-                    axes = ['Severity', 'Occurrence', 'Detection', 'RPN', 'Critical Risks']
+                    axes = ['Avg Severity', 'Avg Occurrence', 'Avg Detection', 'Avg RPN', 'Critical Risks']
                     axis_max = {ax: max([radar_metrics[m][ax] for m in model_names]) or 1 for ax in axes}
                     axis_min = {ax: min([radar_metrics[m][ax] for m in model_names]) for ax in axes}
                     radar_data = []
                     for model in model_names:
-                        values = []
+                        norm_values = []
+                        raw_values = []
                         for ax in axes:
                             v = radar_metrics[model][ax]
+                            raw_values.append(v)
                             if axis_max[ax] == axis_min[ax]:
                                 norm = 5
                             else:
                                 norm = 10 * (v - axis_min[ax]) / (axis_max[ax] - axis_min[ax])
-                            values.append(norm)
+                            norm_values.append(round(norm, 2))
                         radar_data.append({
                             'model': model,
-                            'values': values,
+                            'values': norm_values,
+                            'raw': raw_values,
                         })
+
+                    # Distinct color palette for up to 8 models
+                    _radar_colors = [
+                        'rgba(31, 119, 180, 0.7)',   # blue
+                        'rgba(255, 127, 14, 0.7)',   # orange
+                        'rgba(44, 160, 44, 0.7)',    # green
+                        'rgba(214, 39, 40, 0.7)',    # red
+                        'rgba(148, 103, 189, 0.7)',  # purple
+                        'rgba(140, 86, 75, 0.7)',    # brown
+                        'rgba(227, 119, 194, 0.7)',  # pink
+                        'rgba(127, 127, 127, 0.7)',  # gray
+                    ]
+
                     import plotly.graph_objects as go
                     fig = go.Figure()
-                    for entry in radar_data:
+                    for idx, entry in enumerate(radar_data):
+                        color = _radar_colors[idx % len(_radar_colors)]
+                        fill_color = color.replace('0.7', '0.15')
+                        # Build custom hover text showing actual values
+                        hover_texts = [
+                            f"<b>{axes[i]}</b><br>Normalized: {entry['values'][i]:.1f}/10<br>Actual: {entry['raw'][i]:.2f}"
+                            for i in range(len(axes))
+                        ]
+                        hover_texts.append(hover_texts[0])  # close polygon
                         fig.add_trace(go.Scatterpolar(
                             r=entry['values'] + [entry['values'][0]],
                             theta=axes + [axes[0]],
                             fill='toself',
+                            fillcolor=fill_color,
+                            line=dict(color=color, width=2),
                             name=entry['model'],
-                            opacity=0.5
+                            text=hover_texts,
+                            hoverinfo='text+name',
                         ))
                     fig.update_layout(
                         polar=dict(
-                            radialaxis=dict(visible=True, range=[0, 10])
+                            radialaxis=dict(visible=True, range=[0, 10], tickfont_size=10),
+                            angularaxis=dict(tickfont_size=12),
                         ),
                         showlegend=True,
-                        margin=dict(l=30, r=30, t=40, b=30),
-                        height=500,
-                        legend_title_text='Models',
-                        title="Aggregated Model Metrics (Normalized)"
+                        legend=dict(
+                            orientation='h', yanchor='bottom', y=-0.18,
+                            xanchor='center', x=0.5, font_size=11,
+                        ),
+                        margin=dict(l=60, r=60, t=60, b=60),
+                        height=520,
+                        title=dict(text="Aggregated Model Metrics (Normalized 0-10)", font_size=16, x=0.5),
                     )
                     st.plotly_chart(fig, use_container_width=True)
-                    st.caption("Each axis is normalized (0-10) for visual comparison. Hover for exact values.")
+                    st.caption("Each axis is independently normalized (0-10) across models. Hover over data points for actual values.")
 
                 # Show detailed comparison for high disagreement cases
                 high_disagreement = results['comparison_results']['high_disagreement_cases']
