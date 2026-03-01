@@ -1,6 +1,3 @@
-# Core Dependencies
-python>=3.9
-
 # Data Processing
 pandas>=2.0.0
 numpy>=1.24.0
@@ -49,3 +46,8 @@ pytesseract>=0.3.10
 easyocr>=1.7.0
 Pillow>=10.0.0
 PyMuPDF>=1.24.0
+
+# Voice Input (Whisper - offline speech-to-text)
+openai-whisper>=20231117
+audio-recorder-streamlit>=0.0.8
+soundfile>=0.12.0
