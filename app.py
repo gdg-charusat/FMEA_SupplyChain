@@ -42,6 +42,7 @@ from analytics import (
     calculate_consensus_metrics,
     generate_radar_chart,
     generate_field_radar_chart,
+    enrich_with_consensus,
 )
 
 # Configure logging
@@ -2098,13 +2099,41 @@ def main():
                         st.markdown(f"**Conservative Detection:** {summary['conservative_detection_model']}")
                 st.markdown("---")
                 st.markdown("### 💾 Export Comparison Results")
-                csv_comparison = comparison_display_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Comparison Table (CSV)",
-                    data=csv_comparison,
-                    file_name=f"model_comparison_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
-                )
+
+                exp_c1, exp_c2 = st.columns(2)
+
+                with exp_c1:
+                    csv_comparison = comparison_display_df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download Comparison (CSV)",
+                        data=csv_comparison,
+                        file_name=f"model_comparison_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
+                    )
+
+                with exp_c2:
+                    # --- Styled Excel with automated disagreement alerts ---
+                    from analytics import enrich_with_consensus
+                    enriched_df = enrich_with_consensus(
+                        comparison_df,
+                        individual_results,
+                        consensus_threshold=0.5,
+                    )
+                    ts = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+                    excel_path = Path(f"output/comparison_alerts_{ts}.xlsx")
+                    excel_path.parent.mkdir(exist_ok=True)
+                    generator = initialize_generator(config)
+                    generator.export_fmea_with_alerts(enriched_df, str(excel_path))
+                    with open(excel_path, 'rb') as ef:
+                        st.download_button(
+                            label="📥 Download Excel with Alerts",
+                            data=ef,
+                            file_name=f"comparison_alerts_{ts}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_excel_alerts",
+                        )
+                    st.caption("🔴 Red = High Disagreement · 🟡 Amber = Medium · 🟢 Green = Consensus")
+
                 with st.expander("📦 Export Individual Model Results"):
                     for model_name, model_fmea in individual_results.items():
                         csv_data = model_fmea.to_csv(index=False)

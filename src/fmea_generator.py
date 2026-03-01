@@ -510,6 +510,119 @@ class FMEAGenerator:
             fmea_df.to_csv(output_path, index=False)
             logger.info(f"FMEA exported to CSV: {output_path}")
 
+    # ------------------------------------------------------------------ #
+    #  Excel export with automated disagreement highlighting              #
+    # ------------------------------------------------------------------ #
+
+    def export_fmea_with_alerts(self, fmea_df: pd.DataFrame,
+                                output_path: str,
+                                consensus_threshold: float = 0.5) -> str:
+        """
+        Export FMEA to Excel with conditional formatting:
+        - Rows where Consensus_Status == '🔴 HIGH DISAGREEMENT' get a red fill.
+        - Rows where Review_Required == 'YES' get a bold red font.
+        - The header row gets a branded blue style.
+        - Columns are auto-sized.
+
+        The DataFrame is expected to contain the columns
+        ``Disagreement_Score``, ``Consensus_Status`` and ``Review_Required``
+        (call ``enrich_with_consensus`` in analytics.py first).
+
+        Args:
+            fmea_df: Enriched FMEA DataFrame.
+            output_path: Destination .xlsx path.
+            consensus_threshold: Unused here (threshold is baked into the
+                Consensus_Status column upstream).  Kept for API symmetry.
+
+        Returns:
+            The resolved output path string.
+        """
+        from openpyxl import load_workbook
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+
+        output_path = str(Path(output_path))
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+        # --- Step 1: plain export ------------------------------------------------
+        fmea_df.to_excel(output_path, index=False, engine='openpyxl')
+
+        # --- Step 2: open & style ------------------------------------------------
+        wb = load_workbook(output_path)
+        ws = wb.active
+
+        # Style definitions
+        red_fill   = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
+        amber_fill = PatternFill(start_color='FFEB9C', end_color='FFEB9C', fill_type='solid')
+        green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
+        red_font   = Font(color='9C0006', bold=True)
+        amber_font = Font(color='9C6500')
+        green_font = Font(color='006100')
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(color='FFFFFF', bold=True, size=11)
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin'),
+        )
+
+        # --- Header row ----------------------------------------------------------
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', wrap_text=True)
+            cell.border = thin_border
+
+        # --- Locate the status column (if present) --------------------------------
+        col_names = [c.value for c in ws[1]]
+        status_idx = None
+        review_idx = None
+        score_idx = None
+        if 'Consensus_Status' in col_names:
+            status_idx = col_names.index('Consensus_Status') + 1  # 1-based
+        if 'Review_Required' in col_names:
+            review_idx = col_names.index('Review_Required') + 1
+        if 'Disagreement_Score' in col_names:
+            score_idx = col_names.index('Disagreement_Score') + 1
+
+        # --- Row-level highlighting -----------------------------------------------
+        for row_num in range(2, ws.max_row + 1):
+            status_val = ws.cell(row=row_num, column=status_idx).value if status_idx else None
+            review_val = ws.cell(row=row_num, column=review_idx).value if review_idx else None
+
+            if status_val and 'HIGH DISAGREEMENT' in str(status_val):
+                fill, font = red_fill, red_font
+            elif status_val and 'MEDIUM' in str(status_val):
+                fill, font = amber_fill, amber_font
+            else:
+                fill, font = green_fill, green_font
+
+            for cell in ws[row_num]:
+                cell.fill = fill
+                cell.font = font
+                cell.border = thin_border
+
+            # Extra emphasis on the Review_Required cell
+            if review_val == 'YES' and review_idx:
+                cell_rev = ws.cell(row=row_num, column=review_idx)
+                cell_rev.font = Font(color='9C0006', bold=True, size=12)
+
+        # --- Auto-size columns ----------------------------------------------------
+        for col in ws.columns:
+            max_len = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    max_len = max(max_len, len(str(cell.value or '')))
+                except Exception:
+                    pass
+            ws.column_dimensions[col_letter].width = min(max_len + 3, 55)
+
+        # --- Freeze header row ----------------------------------------------------
+        ws.freeze_panes = 'A2'
+
+        wb.save(output_path)
+        logger.info(f"Exported styled FMEA with alerts to {output_path}")
+        return output_path
+
 
 if __name__ == "__main__":
     # Example usage

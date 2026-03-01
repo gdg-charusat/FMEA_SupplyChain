@@ -383,6 +383,68 @@ def calculate_consensus_metrics(multi_model_results: Dict[str, pd.DataFrame],
     }
 
 
+# ---------------------------------------------------------------------------
+# DataFrame enrichment for Excel export
+# ---------------------------------------------------------------------------
+
+def enrich_with_consensus(comparison_df: pd.DataFrame,
+                          multi_model_results: Dict[str, pd.DataFrame],
+                          consensus_threshold: float = 0.5) -> pd.DataFrame:
+    """
+    Add *Disagreement_Score*, *Consensus_Status* and *Review_Required*
+    columns to an existing comparison DataFrame so that
+    ``FMEAGenerator.export_fmea_with_alerts`` can highlight rows.
+
+    Args:
+        comparison_df: The comparison DataFrame from
+            ``MultiModelComparator.compare_models``.
+        multi_model_results: The ``individual_results`` dict
+            (model_name → FMEA DataFrame).
+        consensus_threshold: Items with a consensus score **below** this
+            value are flagged as high disagreement.
+
+    Returns:
+        A copy of *comparison_df* with three new columns appended.
+    """
+    df = comparison_df.copy()
+
+    # Per-item consensus (CV-based)
+    cs = calculate_consensus_scores(multi_model_results)
+
+    n_items = len(df)
+    disagreement_scores = []
+    consensus_statuses = []
+    review_flags = []
+
+    for i in range(n_items):
+        if i < len(cs):
+            consensus_val = float(cs.iloc[i]['consensus'])
+            cv_val = float(cs.iloc[i]['cv'])
+        else:
+            consensus_val = 1.0
+            cv_val = 0.0
+
+        # Disagreement Score = CV rounded to 2 dp
+        disagreement_scores.append(round(cv_val, 2))
+
+        # Status label
+        if consensus_val < consensus_threshold:
+            consensus_statuses.append('🔴 HIGH DISAGREEMENT')
+            review_flags.append('YES')
+        elif consensus_val < 0.8:
+            consensus_statuses.append('🟡 MEDIUM DISAGREEMENT')
+            review_flags.append('REVIEW')
+        else:
+            consensus_statuses.append('🟢 CONSENSUS')
+            review_flags.append('NO')
+
+    df['Disagreement_Score'] = disagreement_scores
+    df['Consensus_Status'] = consensus_statuses
+    df['Review_Required'] = review_flags
+
+    return df
+
+
 def generate_radar_chart(multi_model_results: Dict[str, pd.DataFrame],
                          title: str = "Multi-Model FMEA Radar Comparison") -> go.Figure:
     """
