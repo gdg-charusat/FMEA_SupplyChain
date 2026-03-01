@@ -207,7 +207,102 @@ This will run 3 demonstration examples and generate sample FMEAs.
 
 ---
 
-## 📖 Usage
+## 📋 Input Data Format & Validation
+
+### Data Format Requirements
+
+To ensure successful FMEA generation, your input data must follow specific formats:
+
+#### **Structured Data (CSV/JSON)**
+
+**Required Fields:**
+- `failure_mode` - Description of how/why the component could fail (5-500 chars)
+- `effect` - Consequence or impact of the failure (5-500 chars)
+- `cause` - Root cause(s) of the failure (5-500 chars)
+
+**Optional Fields:**
+- `component` - Component/subsystem affected
+- `process` - Process where failure occurs
+- `severity` - Score 1-10 (1=low, 10=critical)
+- `occurrence` - Score 1-10 (1=rare, 10=very likely)
+- `detection` - Score 1-10 (1=easy to detect, 10=impossible)
+- `existing_controls` - Current preventive/detective controls
+- `recommended_action` - Suggested action to eliminate/reduce risk
+- `responsibility` - Person/department responsible for action
+- `target_completion_date` - Deadline (YYYY-MM-DD format)
+
+**CSV Example:**
+```csv
+failure_mode,effect,cause,component,severity,occurrence,detection
+"Engine fails to start","Vehicle cannot operate","Battery dead","Engine System",8,3,9
+"Brake fluid leak","Loss of braking power","Corroded line","Brake System",9,2,7
+```
+
+**JSON Example:**
+```json
+[
+  {
+    "failure_mode": "Engine fails to start",
+    "effect": "Vehicle cannot operate",
+    "cause": "Battery dead or starter malfunction",
+    "component": "Engine Starter System",
+    "severity": 8,
+    "occurrence": 3,
+    "detection": 9
+  }
+]
+```
+
+#### **Unstructured Data (Customer Reviews/Text)**
+
+**Required Field:**
+- `text` OR `review` - Raw text content (minimum 5 characters)
+
+**Optional Field:**
+- `source` - Type of source: `review`, `complaint`, `incident_report`, `customer_feedback`, `qa_report`, `warranty_claim`, `field_report`, `test_report`, or `other`
+
+**CSV Example:**
+```csv
+text,source
+"Engine started making loud noises and eventually failed","customer_review"
+"Brake system malfunction caused dangerous situation on highway","warranty_claim"
+```
+
+### ✅ Validation & Error Handling
+
+The system now includes **comprehensive input validation** using Pydantic schemas:
+
+✨ **Features:**
+- ✔️ Automatic detection of structured vs unstructured data
+- ✔️ Field-level validation with type checking
+- ✔️ User-friendly error messages with suggested fixes
+- ✔️ Column header validation
+- ✔️ Numeric range validation (1-10 for risk scores)
+- ✔️ Date format validation (YYYY-MM-DD)
+- ✔️ Detailed validation reports with success rates
+
+📚 **Sample Templates:**
+
+See `examples/input_templates/` for complete templates:
+- `SAMPLE_FMEA_STRUCTURED.csv` - CSV format example
+- `SAMPLE_FMEA_STRUCTURED.json` - JSON format example
+- `SAMPLE_FMEA_UNSTRUCTURED.csv` - Unstructured text example
+- `INPUT_FORMAT_GUIDE.txt` - Detailed formatting guide
+
+### Common Validation Errors & Fixes
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Missing required field: failure_mode` | Column not present in file | Ensure CSV/JSON has the required column |
+| `Text is too short` | Text < 5 characters | Provide text with at least 5 characters |
+| `Invalid numeric range for severity: 15` | Score outside 1-10 | Use values between 1 and 10 only |
+| `Invalid date format: 15/03/2024` | Wrong date format | Use YYYY-MM-DD format (e.g., 2024-03-15) |
+| `Unsupported file format: .txt` | File type not supported | Use CSV, Excel (.xlsx), or JSON format |
+| `File is empty` | No data in file | Ensure file has at least 1 data record |
+
+---
+
+##  Usage
 
 ### 1. Using the Web Dashboard
 
@@ -301,23 +396,33 @@ text_processing:
 ## 📁 Project Structure
 
 ```
-Symboisis/
+FMEA_SupplyChain/
 ├── src/
-│   ├── preprocessing.py       # Data preprocessing module
-│   ├── llm_extractor.py       # LLM-based extraction
-│   ├── risk_scoring.py        # Risk scoring engine
-│   ├── fmea_generator.py      # Main FMEA generator
-│   └── utils.py               # Utility functions
+│   ├── preprocessing.py           # Data preprocessing with validation
+│   ├── validators.py              # Input validation schemas (Pydantic)
+│   ├── llm_extractor.py           # LLM-based extraction
+│   ├── risk_scoring.py            # Risk scoring engine
+│   ├── fmea_generator.py          # Main FMEA generator
+│   ├── ocr_processor.py           # OCR for images/PDFs
+│   └── utils.py                   # Utility functions
 ├── config/
-│   └── config.yaml            # Configuration file
-├── output/                    # Generated FMEAs
-├── archive (3)/               # Sample car review data
-├── app.py                     # Streamlit dashboard
-├── cli.py                     # Command-line interface
-├── examples.py                # Usage examples
-├── requirements.txt           # Python dependencies
-├── .env.example              # Environment variables template
-└── README.md                 # This file
+│   └── config.yaml                # Configuration file
+├── examples/
+│   └── input_templates/           # 📋 Sample data templates
+│       ├── SAMPLE_FMEA_STRUCTURED.csv
+│       ├── SAMPLE_FMEA_STRUCTURED.json
+│       ├── SAMPLE_FMEA_UNSTRUCTURED.csv
+│       └── INPUT_FORMAT_GUIDE.txt
+├── tests/
+│   ├── test_validators.py         # ✅ Unit tests for validation
+│   ├── test_preprocessing_validation.py  # ✅ Integration tests
+│   └── test_*.py                  # Other tests
+├── output/                        # Generated FMEA outputs
+├── archive/                       # Sample data
+├── app.py                         # Streamlit dashboard
+├── cli.py                         # Command-line interface
+├── requirements.txt               # Python dependencies
+└── README.md                      # This file
 ```
 
 ---

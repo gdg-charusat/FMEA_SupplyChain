@@ -4,6 +4,7 @@ Supports unlimited cities with multiple warehouses and multi-hop routing through
 """
 
 import pandas as pd
+import threading
 from .network_config import (
     route_map, DEMAND_REQ, WAREHOUSES, DISTRIBUTION_HUBS,
     DYNAMIC_ROUTE_START_ID, MULTIHOP_ROUTE_START_ID,
@@ -16,6 +17,9 @@ DEFAULT_COST_PER_KM = 2.0
 DEFAULT_HUB_DISTANCE_KM = 300  # Distance from warehouse to hub
 DEFAULT_HUB_TO_CITY_KM = 250   # Distance from hub to final destination
 DEFAULT_DEMAND = 250
+
+# ✅ THREAD SAFETY: Protected access to global route state
+_route_state_lock = threading.RLock()  # Recursive lock for nested access
 
 # Track dynamically created routes
 _dynamic_direct_routes = {}  # city -> [route_ids] for direct routes
@@ -33,6 +37,7 @@ def get_routes_for_city(city_name, include_multihop=True):
     """
     Get ALL route IDs serving a city (predefined + dynamic + multi-hop)
     FULLY DYNAMIC: Creates routes for ALL cities, including predefined ones!
+    ✅ THREAD SAFE: Protected from race conditions
     
     Args:
         city_name: Destination city
@@ -47,24 +52,26 @@ def get_routes_for_city(city_name, include_multihop=True):
     predefined = [rid for rid, (src, dst) in route_map.items() if dst == city_name]
     all_routes.extend(predefined)
     
-    # 2. ALWAYS create dynamic DIRECT routes for ALL cities
-    # This ensures EVERY city gets routes from ALL warehouses
-    if city_name not in _dynamic_direct_routes:
-        # Create new dynamic direct routes (one from EACH warehouse)
-        created = create_direct_routes(city_name)
-        all_routes.extend(created)
-    else:
-        all_routes.extend(_dynamic_direct_routes[city_name])
-    
-    # 3. ALWAYS create multi-hop routes for ALL cities
-    # This provides alternative paths through distribution hubs
-    if include_multihop:
-        if city_name not in _dynamic_multihop_routes:
-            # Create multi-hop routes through ALL hubs
-            created = create_multihop_routes(city_name)
+    # ✅ FIX: Use lock to prevent race conditions
+    with _route_state_lock:
+        # 2. ALWAYS create dynamic DIRECT routes for ALL cities
+        # This ensures EVERY city gets routes from ALL warehouses
+        if city_name not in _dynamic_direct_routes:
+            # Create new dynamic direct routes (one from EACH warehouse)
+            created = create_direct_routes(city_name)
             all_routes.extend(created)
         else:
-            all_routes.extend(_dynamic_multihop_routes[city_name])
+            all_routes.extend(_dynamic_direct_routes[city_name])
+        
+        # 3. ALWAYS create multi-hop routes for ALL cities
+        # This provides alternative paths through distribution hubs
+        if include_multihop:
+            if city_name not in _dynamic_multihop_routes:
+                # Create multi-hop routes through ALL hubs
+                created = create_multihop_routes(city_name)
+                all_routes.extend(created)
+            else:
+                all_routes.extend(_dynamic_multihop_routes[city_name])
     
     return all_routes
 
@@ -73,6 +80,7 @@ def create_direct_routes(city_name):
     """
     Create DIRECT routes from ALL warehouses to a city
     DYNAMIC: Automatically uses all warehouses defined in WAREHOUSES dict
+    ✅ THREAD SAFE: Must be called within _route_state_lock context
     
     Args:
         city_name: Destination city
@@ -89,7 +97,7 @@ def create_direct_routes(city_name):
     
     for warehouse in warehouses:
         route_id = _next_dynamic_id
-        _next_dynamic_id += 1
+        _next_dynamic_id += 1  # ✅ SAFE: Protected by _route_state_lock in caller
         
         # Store in dynamic route map
         if city_name not in _dynamic_direct_routes:
@@ -108,6 +116,7 @@ def create_multihop_routes(city_name):
     Create MULTI-HOP routes through intermediate distribution hubs
     Pattern: Warehouse → Hub → Destination City
     DYNAMIC: Automatically uses all hubs defined in DISTRIBUTION_HUBS dict
+    ✅ THREAD SAFE: Must be called within _route_state_lock context
     
     Args:
         city_name: Destination city
@@ -127,7 +136,7 @@ def create_multihop_routes(city_name):
     for warehouse in warehouses:
         for hub in hubs:
             route_id = _next_multihop_id
-            _next_multihop_id += 1
+            _next_multihop_id += 1  # ✅ SAFE: Protected by _route_state_lock in caller
             
             # Store in multi-hop route map
             if city_name not in _dynamic_multihop_routes:
@@ -182,6 +191,7 @@ def get_route_details(route_id):
     """
     Get detailed information about a route
     Returns: dict with source, destination, route_type, hops, etc.
+    ✅ THREAD SAFE: Protected from race conditions
     """
     # Check predefined routes
     if route_id in route_map:
@@ -196,44 +206,46 @@ def get_route_details(route_id):
             "is_primary": route_id in PRIMARY_ROUTES
         }
     
-    # Check dynamic direct routes
-    for city, route_list in _dynamic_direct_routes.items():
-        if route_id in route_list:
-            idx = route_list.index(route_id)
-            warehouses = get_warehouse_list()
-            warehouse = warehouses[idx % len(warehouses)]
-            return {
-                "route_id": route_id,
-                "source": warehouse,
-                "destination": city,
-                "route_type": "DYNAMIC_DIRECT",
-                "hops": 1,
-                "via_hub": None,
-                "is_primary": idx == 0  # First warehouse is primary
-            }
-    
-    # Check multi-hop routes
-    for city, route_list in _dynamic_multihop_routes.items():
-        if route_id in route_list:
-            idx = route_list.index(route_id)
-            warehouses = get_warehouse_list()
-            hubs = get_hub_list()
-            
-            warehouse_idx = idx // len(hubs)
-            hub_idx = idx % len(hubs)
-            
-            warehouse = warehouses[warehouse_idx % len(warehouses)]
-            hub = hubs[hub_idx]
-            
-            return {
-                "route_id": route_id,
-                "source": warehouse,
-                "destination": city,
-                "route_type": "MULTI_HOP",
-                "hops": 2,
-                "via_hub": hub,
-                "is_primary": False  # Multi-hop routes are always alternatives
-            }
+    # ✅ FIX: Use lock to prevent race conditions while reading
+    with _route_state_lock:
+        # Check dynamic direct routes
+        for city, route_list in _dynamic_direct_routes.items():
+            if route_id in route_list:
+                idx = route_list.index(route_id)
+                warehouses = get_warehouse_list()
+                warehouse = warehouses[idx % len(warehouses)]
+                return {
+                    "route_id": route_id,
+                    "source": warehouse,
+                    "destination": city,
+                    "route_type": "DYNAMIC_DIRECT",
+                    "hops": 1,
+                    "via_hub": None,
+                    "is_primary": idx == 0  # First warehouse is primary
+                }
+        
+        # Check multi-hop routes
+        for city, route_list in _dynamic_multihop_routes.items():
+            if route_id in route_list:
+                idx = route_list.index(route_id)
+                warehouses = get_warehouse_list()
+                hubs = get_hub_list()
+                
+                warehouse_idx = idx // len(hubs)
+                hub_idx = idx % len(hubs)
+                
+                warehouse = warehouses[warehouse_idx % len(warehouses)]
+                hub = hubs[hub_idx]
+                
+                return {
+                    "route_id": route_id,
+                    "source": warehouse,
+                    "destination": city,
+                    "route_type": "MULTI_HOP",
+                    "hops": 2,
+                    "via_hub": hub,
+                    "is_primary": False  # Multi-hop routes are always alternatives
+                }
     
     return None
 
@@ -247,6 +259,7 @@ def get_full_route_map(include_dynamic=True, include_multihop=True):
     """
     Get complete route map including ALL routes (predefined + dynamic + multi-hop)
     DYNAMIC: Automatically includes all generated routes
+    ✅ THREAD SAFE: Protected from race conditions
     
     Args:
         include_dynamic: Include dynamically created direct routes
@@ -255,33 +268,35 @@ def get_full_route_map(include_dynamic=True, include_multihop=True):
     Returns:
         dict mapping route_id -> (source, destination) or (source, hub, destination)
     """
-    full_map = route_map.copy()
-    
-    # Add dynamic direct routes
-    if include_dynamic:
-        for city_name, route_ids in _dynamic_direct_routes.items():
-            warehouses = get_warehouse_list()
-            for idx, route_id in enumerate(route_ids):
-                warehouse = warehouses[idx % len(warehouses)]
-                full_map[route_id] = (warehouse, city_name)
-    
-    # Add multi-hop routes
-    if include_multihop:
-        for city_name, route_ids in _dynamic_multihop_routes.items():
-            warehouses = get_warehouse_list()
-            hubs = get_hub_list()
-            
-            for idx, route_id in enumerate(route_ids):
-                warehouse_idx = idx // len(hubs)
-                hub_idx = idx % len(hubs)
+    # ✅ FIX: Use lock to prevent reading while another thread is writing
+    with _route_state_lock:
+        full_map = route_map.copy()
+        
+        # Add dynamic direct routes
+        if include_dynamic:
+            for city_name, route_ids in _dynamic_direct_routes.items():
+                warehouses = get_warehouse_list()
+                for idx, route_id in enumerate(route_ids):
+                    warehouse = warehouses[idx % len(warehouses)]
+                    full_map[route_id] = (warehouse, city_name)
+        
+        # Add multi-hop routes
+        if include_multihop:
+            for city_name, route_ids in _dynamic_multihop_routes.items():
+                warehouses = get_warehouse_list()
+                hubs = get_hub_list()
                 
-                warehouse = warehouses[warehouse_idx % len(warehouses)]
-                hub = hubs[hub_idx]
-                
-                # For multi-hop, store as tuple (warehouse, hub, city)
-                full_map[route_id] = (warehouse, hub, city_name)
-    
-    return full_map
+                for idx, route_id in enumerate(route_ids):
+                    warehouse_idx = idx // len(hubs)
+                    hub_idx = idx % len(hubs)
+                    
+                    warehouse = warehouses[warehouse_idx % len(warehouses)]
+                    hub = hubs[hub_idx]
+                    
+                    # For multi-hop, store as tuple (warehouse, hub, city)
+                    full_map[route_id] = (warehouse, hub, city_name)
+        
+        return full_map
 
 
 def get_primary_route_for_city(city_name):
@@ -316,25 +331,36 @@ def get_backup_routes_for_city(city_name):
 
 
 def reset_dynamic_routes():
-    """Clear all dynamically created routes (for testing)"""
+    """
+    Clear all dynamically created routes (for testing)
+    ✅ THREAD SAFE: Protected from race conditions
+    """
     global _dynamic_direct_routes, _dynamic_multihop_routes, _next_dynamic_id, _next_multihop_id
-    _dynamic_direct_routes = {}
-    _dynamic_multihop_routes = {}
-    _next_dynamic_id = DYNAMIC_ROUTE_START_ID
-    _next_multihop_id = MULTIHOP_ROUTE_START_ID
+    
+    with _route_state_lock:
+        _dynamic_direct_routes = {}
+        _dynamic_multihop_routes = {}
+        _next_dynamic_id = DYNAMIC_ROUTE_START_ID
+        _next_multihop_id = MULTIHOP_ROUTE_START_ID
+    
     print("[DYNAMIC NETWORK] Reset: All dynamic and multi-hop routes cleared")
 
 
 def get_network_summary():
-    """Get comprehensive summary of current network state"""
-    predefined_cities = len(DEMAND_REQ)
-    dynamic_cities = len(_dynamic_direct_routes)
-    total_warehouses = len(WAREHOUSES)
-    total_hubs = len(DISTRIBUTION_HUBS)
-    
-    direct_route_count = sum(len(routes) for routes in _dynamic_direct_routes.values())
-    multihop_route_count = sum(len(routes) for routes in _dynamic_multihop_routes.values())
-    total_routes = len(route_map) + direct_route_count + multihop_route_count
+    """
+    Get comprehensive summary of current network state
+    ✅ THREAD SAFE: Protected from race conditions
+    """
+    # ✅ FIX: Use lock to ensure consistent snapshot of state
+    with _route_state_lock:
+        predefined_cities = len(DEMAND_REQ)
+        dynamic_cities = len(_dynamic_direct_routes)
+        total_warehouses = len(WAREHOUSES)
+        total_hubs = len(DISTRIBUTION_HUBS)
+        
+        direct_route_count = sum(len(routes) for routes in _dynamic_direct_routes.values())
+        multihop_route_count = sum(len(routes) for routes in _dynamic_multihop_routes.values())
+        total_routes = len(route_map) + direct_route_count + multihop_route_count
     
     return {
         "network_type": "DYNAMIC (No Hardcoding)",

@@ -16,8 +16,13 @@ import logging
 from PIL import Image
 import io
 
+# Configure logging FIRST (needed for imports below)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Add src directory to path
 sys.path.append(str(Path(__file__).parent / 'src'))
+
 
 from src.fmea_generator import FMEAGenerator
 from src.preprocessing import DataPreprocessor
@@ -27,12 +32,35 @@ from src.ocr_processor import OCRProcessor
 from src.history_tracker import FMEAHistoryTracker
 from src.voice_input import VoiceInputProcessor
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from fmea_generator import FMEAGenerator
+from preprocessing import DataPreprocessor
+from llm_extractor import LLMExtractor
+from risk_scoring import RiskScoringEngine
+
+
+# Try to import OCR processor (optional feature)
+try:
+    from ocr_processor import OCRProcessor
+    OCR_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"OCR processor not available: {e}. OCR features will be disabled.")
+    OCRProcessor = None
+    OCR_AVAILABLE = False
+
+# Try to import optional modules
+try:
+    from history_tracker import FMEAHistoryTracker
+except ImportError:
+    FMEAHistoryTracker = None
+
+try:
+    from voice_input import VoiceInputProcessor
+except ImportError:
+    VoiceInputProcessor = None
 
 # Currency conversion rate (USD to INR)
 USD_TO_INR_RATE = 83.50
+
 
 def format_currency(amount, currency='USD'):
     """
@@ -588,10 +616,12 @@ def main():
                     help=f"Supported formats: TXT, DOC, DOCX, PDF. Max size: {MAX_FILE_SIZE_MB} MB."
                 )
                 if uploaded_file:
+
                     is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_TEXT_TYPES)
                     if not is_valid:
                         st.error(error_msg)
                         st.stop()
+<
                     show_file_info(uploaded_file)
                     file_name = uploaded_file.name.lower()
                     try:
@@ -629,7 +659,52 @@ def main():
                                 st.stop()
                             fmea_df = generator.generate_from_text(texts, is_file=False)
                             st.session_state['fmea_df'] = fmea_df
-                            st.session_state['fmea_saved'] = False
+                            st.session_state['fmea_saved'] = False                  
+
+                    show_file_info(uploaded_file)
+
+                    if st.button("🚀 Read File & Generate FMEA", type="primary"):
+                        with st.spinner("Reading text from file..."):
+                            file_name = uploaded_file.name.lower()
+                            try:
+                                if file_name.endswith('.txt'):
+                                    extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
+                                elif file_name.endswith('.pdf'):
+                                    import PyPDF2, io
+                                    reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.getvalue()))
+                                    extracted_text = "\n".join(
+                                        page.extract_text() or "" for page in reader.pages
+                                    )
+                                elif file_name.endswith(('.doc', '.docx')):
+                                    import docx, io
+                                    doc = docx.Document(io.BytesIO(uploaded_file.getvalue()))
+                                    extracted_text = "\n".join(
+                                        para.text for para in doc.paragraphs
+                                    )
+                                else:
+                                    extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
+                            except Exception as e:
+                                st.error(f"⚠️ Failed to read file: {e}")
+                                st.stop()
+                            
+                            # Show extracted text
+                            st.markdown("**Extracted Text:**")
+                            st.text_area("", extracted_text, height=150, key="extracted", disabled=True)
+                            
+                            if not extracted_text or not extracted_text.strip():
+                                st.error("⚠️ The file contains no readable text. Please upload a different file.")
+                                st.stop()
+                            else:
+                                with st.spinner("Generating FMEA from text..."):
+                                    generator = initialize_generator(config)
+                                    texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
+                                    if not texts:
+                                        st.error("⚠️ No usable text content found in the file. Please try a different file.")
+                                        st.stop()
+                                    fmea_df = generator.generate_from_text(texts, is_file=False)
+                                    st.session_state['fmea_df'] = fmea_df
+                                    st.session_state['fmea_saved'] = False
+
                 else:
                     st.info("📤 Please upload a text document (TXT, DOC, DOCX, PDF) to begin or enter text below.")
             elif text_input_method == "Enter Text Manually":
@@ -647,11 +722,19 @@ def main():
                     if not texts:
                         st.error("⚠️ No usable text found. Please enter valid content (not just whitespace or empty lines).")
                         st.stop()
-                    with st.spinner("Analyzing text and generating FMEA..."):
-                        generator = initialize_generator(config)
-                        fmea_df = generator.generate_from_text(texts, is_file=False)
-                        st.session_state['fmea_df'] = fmea_df
-                        st.session_state['fmea_saved'] = False
+                    try:
+                        with st.spinner("Analyzing text and generating FMEA..."):
+                            generator = initialize_generator(config)
+                            fmea_df = generator.generate_from_text(texts, is_file=False)
+                            st.session_state['fmea_df'] = fmea_df
+                            st.session_state['fmea_saved'] = False
+                            st.success("✅ FMEA generated successfully!")
+                    except ValueError as e:
+                        st.error(f"❌ Validation Error: {str(e)}")
+                        st.info("💡 Ensure text entries are at least 5 characters long")
+                    except Exception as e:
+                        st.error(f"❌ Error generating FMEA: {str(e)}")
+                        logger.error(f"Error with text input: {e}")
 
 
         elif input_type == "📷 Scan Document (OCR)":
@@ -679,19 +762,28 @@ def main():
                 if st.session_state.get('ocr_source_key') != file_key:
                     with st.spinner("Extracting text from document..."):
                         try:
-                            processor = OCRProcessor()
-                            if file_name.endswith('.pdf'):
-                                extracted_text = processor.extract_text_from_pdf(file_bytes)
+                            if not OCR_AVAILABLE:
+                                st.error(
+                                    "❌ OCR feature is not available. "
+                                    "Please install required dependencies: "
+                                    "`pip install pytesseract pymupdf`"
+                                )
+                                st.session_state['ocr_text'] = ""
+                                st.session_state['ocr_edit'] = ""
                             else:
-                                extracted_text = processor.extract_text_from_image(file_bytes)
+                                processor = OCRProcessor()
+                                if file_name.endswith('.pdf'):
+                                    extracted_text = processor.extract_text_from_pdf(file_bytes)
+                                else:
+                                    extracted_text = processor.extract_text_from_image(file_bytes)
 
-                            st.session_state['ocr_source_key'] = file_key
-                            st.session_state['ocr_text'] = extracted_text
-                            st.session_state['ocr_edit'] = extracted_text
+                                st.session_state['ocr_source_key'] = file_key
+                                st.session_state['ocr_text'] = extracted_text
+                                st.session_state['ocr_edit'] = extracted_text
                         except Exception as e:
                             st.session_state['ocr_text'] = ""
                             st.session_state['ocr_edit'] = ""
-                            st.error(f"OCR failed: {e}")
+                            st.error(f"❌ OCR failed: {e}")
 
                 col1, col2 = st.columns([1, 1])
 
@@ -722,6 +814,7 @@ def main():
                         if not texts:
                             st.error("⚠️ No usable text content found. Please add valid text before generating FMEA.")
                             st.stop()
+
                         with st.spinner("Generating FMEA from OCR text..."):
                             generator = initialize_generator(config)
                             fmea_df = generator.generate_from_text(texts, is_file=False)
@@ -729,6 +822,23 @@ def main():
             else:
                 st.info("📤 Please upload an image or PDF document for OCR extraction.")
 
+
+                        try:
+                            with st.spinner("Generating FMEA from OCR text..."):
+                                generator = initialize_generator(config)
+                                fmea_df = generator.generate_from_text(texts, is_file=False)
+                                st.session_state['fmea_df'] = fmea_df
+                                st.session_state['fmea_saved'] = False
+                                st.success("✅ FMEA generated successfully!")
+                        except ValueError as e:
+                            st.error(f"❌ Validation Error: {str(e)}")
+                            st.info("💡 Ensure text entries are at least 5 characters long")
+                        except Exception as e:
+                            st.error(f"❌ Error generating FMEA: {str(e)}")
+                            logger.error(f"Error with OCR edited text: {e}")
+            else:
+                st.info("📤 Please upload an image or PDF document for OCR extraction.")
+        
         elif input_type == "🎙️ Voice Input":
             st.markdown("**🎙️ Record your failure description:**")
             st.info("Click the microphone button below, speak your failure description clearly, then click stop.")
@@ -807,12 +917,42 @@ def main():
                 with open(temp_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 if st.button("🚀 Generate FMEA", type="primary"):
+
                     with st.spinner("Processing structured data..."):
                         generator = initialize_generator(config)
                         fmea_df = generator.generate_from_structured(str(temp_path))
                         st.session_state['fmea_df'] = fmea_df
                         st.session_state['fmea_saved'] = False
                     temp_path.unlink()
+                    try:
+                        with st.spinner("Processing structured data..."):
+                            generator = initialize_generator(config)
+                            fmea_df = generator.generate_from_structured(str(temp_path))
+                            st.session_state['fmea_df'] = fmea_df
+                            st.session_state['fmea_saved'] = False
+                            st.success("✅ FMEA generated successfully!")
+                    except ValueError as e:
+                        st.error(f"❌ Validation Error: {str(e)}")
+                        st.info(
+                            "💡 **Tips for fixing the error:**\n\n"
+                            "1. Check required columns: `failure_mode`, `effect`, `cause`\n"
+                            "2. Ensure all required fields have values\n"
+                            "3. Text fields should be 5-500 characters\n"
+                            "4. Risk scores (severity, occurrence, detection) should be 1-10\n"
+                            "5. See `examples/input_templates/` for sample files\n"
+                            "6. Read `examples/input_templates/INPUT_FORMAT_GUIDE.txt` for detailed rules"
+                        )
+                        logger.error(f"Structured data validation error: {e}")
+                    except Exception as e:
+                        st.error(f"❌ Error processing file: {str(e)}")
+                        logger.error(f"Error processing structured file: {e}")
+                    finally:
+                        # Clean up temp file
+                        if temp_path.exists():
+                            try:
+                                temp_path.unlink()
+                            except:
+                                pass
             else:
                 st.info("📤 Please upload a CSV or Excel file to begin.")
 
