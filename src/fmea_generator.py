@@ -79,34 +79,27 @@ class FMEAGenerator:
         original_model = self.config['model']['name']
         
         try:
+            import copy
             for model_name in model_names:
                 logger.info(f"Generating FMEA for model: {model_name}")
-                
-                # Update config temporarily
-                self.config['model']['name'] = model_name
-                
-                # Create new extractor with updated config
-                temp_extractor = LLMExtractor(self.config)
-                
+                # Deep copy config for thread safety
+                model_config = copy.deepcopy(self.config)
+                model_config['model']['name'] = model_name
+                # Create new extractor with deep-copied config
+                temp_extractor = LLMExtractor(model_config)
                 # Extract failure information using this model
                 extracted_info = temp_extractor.batch_extract(texts)
                 extracted_df = pd.DataFrame(extracted_info)
-                
                 # Add original text for reference
                 extracted_df['original_text'] = preprocessed_df['text'].values
                 extracted_df['sentiment'] = preprocessed_df['sentiment'].values
-                
                 # Calculate risk scores
                 fmea_df = self.scorer.batch_score(extracted_df)
-                
                 # Generate recommendations
                 fmea_df = self._generate_recommendations(fmea_df)
-                
                 # Format output
                 fmea_df = self._format_output(fmea_df)
-                
                 individual_results[model_name] = fmea_df
-                
                 logger.info(f"Generated FMEA for {model_name} with {len(fmea_df)} entries")
         
         finally:
@@ -154,14 +147,13 @@ class FMEAGenerator:
         original_model = self.config['model']['name']
         
         try:
+            import copy
             for model_name in model_names:
                 logger.info(f"Processing structured data for model: {model_name}")
-                
-                # Update config temporarily
-                self.config['model']['name'] = model_name
-                
+                # Deep copy config for thread safety
+                model_config = copy.deepcopy(self.config)
+                model_config['model']['name'] = model_name
                 fmea_df = structured_df.copy()
-                
                 if not has_scores:
                     # For comparison, we use the same scorer for all models
                     # The difference would come from different extracted failure modes
@@ -178,15 +170,11 @@ class FMEAGenerator:
                             row['severity'], row['occurrence'], row['detection']
                         ), axis=1
                     )
-                
                 # Generate recommendations
                 fmea_df = self._generate_recommendations(fmea_df)
-                
                 # Format output
                 fmea_df = self._format_output(fmea_df)
-                
                 individual_results[model_name] = fmea_df
-                
                 logger.info(f"Processed structured data for {model_name} with {len(fmea_df)} entries")
         
         finally:
