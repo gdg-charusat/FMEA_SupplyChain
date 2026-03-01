@@ -16,6 +16,15 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 # OCR imports with robust fallback logic
+# Import dynamic route lookup for non-hardcoded cities
+try:
+    from .dynamic_network import get_routes_for_city
+    DYNAMIC_ROUTING_AVAILABLE = True
+except ImportError:
+    DYNAMIC_ROUTING_AVAILABLE = False
+    logger.warning("Dynamic routing not available. Will use mapping config only.")
+
+# OCR imports (using existing FMEA OCR setup)
 try:
     import easyocr
     OCR_AVAILABLE = True
@@ -171,8 +180,34 @@ class DisruptionExtractor:
             }
             for location, routes in location_to_routes.items():
                 if location in text_lower:
+        # STEP 2: If no route numbers found, try location-based extraction from mapping config
+        if not affected_routes:
+            # Use the loaded mapping config (supports many more locations)
+            mappings = self.mapping_config.get('mappings', {}).get('locations', {})
+            
+            # Try all mappings (case-insensitive)
+            for location, routes in mappings.items():
+                if location.lower() in text_lower:
                     affected_routes.extend(routes)
                     break
+            
+            # STEP 2b: If still no match and dynamic routing is available, try dynamic lookup
+            if not affected_routes and DYNAMIC_ROUTING_AVAILABLE:
+                # Extract potential city names (capitalized words that might be cities)
+                import re
+                potential_cities = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b', text)
+                
+                for city in potential_cities:
+                    try:
+                        # Attempt dynamic route resolution
+                        dynamic_routes = get_routes_for_city(city, include_multihop=False)
+                        if dynamic_routes:
+                            affected_routes.extend(dynamic_routes[:2])  # Use first 2 routes
+                            print(f"[EXTRACTOR] Dynamically resolved '{city}' to routes {dynamic_routes[:2]}")
+                            break
+                    except Exception as e:
+                        # Continue trying other potential cities
+                        continue
         
         # Standalone number fallback
         if not affected_routes:
@@ -202,6 +237,88 @@ class DisruptionExtractor:
             cost_multiplier = float(multiplier_match.group(1))
 
         for route_id in set(affected_routes):
+            print(f"[EXTRACTOR] Found explicit multiplier in text: {cost_multiplier}x")
+        
+        # GRACEFUL FALLBACK if no routes could be extracted
+        if not affected_routes:
+            warning_msg = (
+                f"WARNING: Could not extract route information from: '{text[:100]}...'\n"
+                f"No explicit route numbers found and location not recognized.\n"
+                f"Returning empty disruption list. To fix:\n"
+                f"  1. Specify route numbers explicitly (e.g., 'Route 3', 'routes 5 and 7'), OR\n"
+                f"  2. Add location to mapping_config.json, OR\n"
+                f"  3. Mention a recognized location (check mapping_config.json for available locations)"
+            )
+            print(f"[EXTRACTOR] {warning_msg}")
+            logger.warning(warning_msg)
+            # Return empty list instead of raising error
+            return []
+        
+        print(f"[EXTRACTOR] ✓ Extracted Routes: {affected_routes}")
+        print(f"[EXTRACTOR] ✓ Impact Type: {impact_type}")
+        print(f"[EXTRACTOR] ✓ Cost Multiplier: {cost_multiplier}x")
+        print(f"[EXTRACTOR] ✓ Severity: {severity_score}/10")
+        
+        # Create disruption for each affected route
+        for route_id in set(affected_routes):  # Remove duplicates
+            disruptions.append({
+                'target_route_id': route_id,
+                'impact_type': impact_type,
+                'cost_multiplier': cost_multiplier,
+                'severity_score': severity_score
+            })
+        
+        return disruptions
+        
+    def _old_mapping_based_extraction(self, text: str) -> List[Dict]:
+        """
+        OLD LOGIC - Kept for reference but not used
+        """
+        text_lower = text.lower()
+        disruptions = []
+        
+        # Map locations to route IDs
+        affected_routes = []
+        for location, route_ids in self.mapping_config['mappings']['locations'].items():
+            if location.lower() in text_lower:
+                affected_routes.extend(route_ids)
+        
+        # Determine impact type
+        impact_type = 'accident'  # default
+        for imp_type in self.mapping_config['impact_types'].keys():
+            if imp_type in text_lower:
+                impact_type = imp_type
+                break
+        
+        # Get default multiplier and severity
+        impact_config = self.mapping_config['impact_types'].get(
+            impact_type,
+            {'default_multiplier': 1.5, 'severity_range': [5, 7]}
+        )
+        
+        cost_multiplier = impact_config['default_multiplier']
+        severity_score = impact_config['severity_range'][0]
+        
+        # Adjust based on keywords
+        if any(word in text_lower for word in ['severe', 'major', 'critical', 'catastrophic']):
+            cost_multiplier = min(cost_multiplier * 1.5, 10.0)
+            severity_score = min(severity_score + 2, 10)
+        elif any(word in text_lower for word in ['minor', 'slight', 'small']):
+            cost_multiplier = max(cost_multiplier * 0.8, 1.0)
+            severity_score = max(severity_score - 2, 1)
+        
+        # Create disruptions for affected routes
+        if not affected_routes:
+            # NO FALLBACK - Raise error so user sees what's wrong
+            error_msg = (
+                f"Cannot extract route information from text: '{text[:100]}...'. "
+                f"No location keywords found in mapping_config.json. "
+                f"Available locations: {list(self.mapping_config['mappings']['locations'].keys())}"
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        for route_id in set(affected_routes):  # Remove duplicates
             disruptions.append({
                 'target_route_id': route_id,
                 'impact_type': impact_type,

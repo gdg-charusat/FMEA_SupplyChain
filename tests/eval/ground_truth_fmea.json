@@ -1,0 +1,252 @@
+[
+  {
+    "id": "FM1",
+    "input_text": "During routine maintenance inspection, I noticed oil dripping from the gearbox area. The leak appears to be coming from the seal area and there seems to be some damage to the seal ring. This could be due to poor assembly quality or the seal ring being defective from the start.",
+    "expected_output": {
+      "failure_mode": "Gearbox oil leakage", 
+      "effect": "Reduce the life of worm gear transmission",
+      "cause": "Seal ring damage or unqualified assembly",
+      "component": "Gearbox"
+    }
+  },
+  {
+    "id": "FM7", 
+    "input_text": "The motor is running extremely hot, much hotter than normal operating temperature. I suspect there might be bearing damage or the cooling fan has failed. If this continues, the motor will likely be damaged permanently.",
+    "expected_output": {
+      "failure_mode": "Excessively high motor temperature",
+      "effect": "Motor damage", 
+      "cause": "Bearing damage or motor fan damage",
+      "component": "Motor"
+    }
+  },
+  {
+    "id": "FM15",
+    "input_text": "The gas turbine starter is not functioning properly - when I try to start the engine it fails to turn over. The starter seems to have low efficiency and isn't providing enough power to get the engine going.",
+    "expected_output": {
+      "failure_mode": "Function failure when not turning the engine on starting",
+      "effect": "Function failure",
+      "cause": "Starter low efficiency", 
+      "component": "Gas turbine starter"
+    }
+  },
+  {
+    "id": "FM22",
+    "input_text": "There's noticeable wear on the piston of the pusher assembly. This appears to be due to inadequate lubrication and general wear over time. The wear is creating clearance and play in the assembly which affects operation.",
+    "expected_output": {
+      "failure_mode": "Wear of piston of the pusher assembly",
+      "effect": "Clearance and play in the assembly",
+      "cause": "Lubrication, wear out",
+      "component": "Pusher assembly"
+    }
+  },
+  {
+    "id": "FM36",
+    "input_text": "We found that the wire insulation has broken down in the electrical system. This was caused by prolonged exposure to heat and the aging of the insulation material. This breakdown has resulted in a short circuit condition.",
+    "expected_output": {
+      "failure_mode": "Wire Insulation Breakdown", 
+      "effect": "Short circuit",
+      "cause": "Heat and aging",
+      "component": "Electrical System"
+    }
+  },
+  {
+    "id": "FM42",
+    "input_text": "The battery system has completely failed. Investigation shows this was due to overcharging the batteries or allowing them to deep discharge repeatedly. As a result, we've lost all power to the system.",
+    "expected_output": {
+      "failure_mode": "Battery Failure",
+      "effect": "Power loss", 
+      "cause": "Overcharging or deep discharge",
+      "component": "Battery System"
+    }
+  },
+  {
+    "id": "FM51",
+    "input_text": "The water pump is experiencing cavitation issues. This is happening because we're operating at too high velocity or there's insufficient pressure in the system. The cavitation is causing damage to internal pump components.", 
+    "expected_output": {
+      "failure_mode": "Cavitation",
+      "effect": "Damage to pump components",
+      "cause": "High velocity operation or low pressure", 
+      "component": "Water Pump"
+    }
+  },
+  {
+    "id": "FM57",
+    "input_text": "We discovered corrosion damage on the pressure vessel. This corrosion was caused by chemical exposure over time. If this continues, it could lead to a leak or even catastrophic burst of the vessel.",
+    "expected_output": {
+      "failure_mode": "Corrosion Damage",
+      "effect": "Leak or burst",
+      "cause": "Chemical exposure", 
+      "component": "Pressure Vessel"
+    }
+  },
+  {
+    "id": "FM60", 
+    "input_text": "Our navigation system is experiencing GPS signal loss. This appears to be due to signal interference from nearby equipment or structures. The signal loss is causing navigation errors and making it difficult to determine our position accurately.",
+    "expected_output": {
+      "failure_mode": "GPS Signal Loss",
+      "effect": "Navigation error",
+      "cause": "Signal interference",
+      "component": "Navigation System" 
+    }
+  },
+  {
+    "id": "FM35",
+    "input_text": "The valve in our system is sticking and not operating smoothly. This sticking appears to be caused by mineral deposits that have built up over time. The valve sticking is reducing the fluid flow through the system.",
+    "expected_output": {
+      "failure_mode": "Valve Sticking", 
+      "effect": "Reduced fluid flow",
+      "cause": "Mineral deposits",
+      "component": "Valve System"
+    }
+  },
+  {
+    "id": "FM47",
+    "input_text": "The power supply unit is overheating significantly. The cause appears to be inadequate ventilation in the equipment cabinet. Due to this overheating, the equipment is shutting down automatically to prevent damage.",
+    "expected_output": {
+      "failure_mode": "Overheating",
+      "effect": "Shutdown of equipment", 
+      "cause": "Inadequate ventilation",
+      "component": "Power Supply" 
+    }
+  },
+  {
+    "id": "FM54",
+    "input_text": "The drone's rotor has been damaged after impacting with tree branches during flight. This rotor damage is causing significant flight instability and making the drone difficult to control.",
+    "expected_output": {
+      "failure_mode": "Rotor Damage",
+      "effect": "Flight instability",
+      "cause": "Impact with objects",
+      "component": "Drone"
+    }
+  },
+  {
+    "id": "FM13",
+    "input_text": "The fuel gauge is displaying erratic readings with swinging and jittery needle movements. This appears to be due to an internal bridge fault in the oil indicator mechanism. This malfunction damages the system's functionality for accurate fuel level monitoring.",
+    "expected_output": {
+      "failure_mode": "Swing. Jitter. in the instruction swing", 
+      "effect": "Damages system functionality",
+      "cause": "Oil indicator internal bridge fault",
+      "component": "Fuel gauge"
+    }
+  },
+  {
+    "id": "FM2",
+    "input_text": "There's a hydraulic fluid leak coming from the hydraulic cylinder. The leak appears to be caused by a damaged seal ring that's no longer providing proper sealing. This leakage is leading to hydraulic system failure.", 
+    "expected_output": {
+      "failure_mode": "Hydraulic cylinder leakage",
+      "effect": "Hydraulic system failure", 
+      "cause": "Seal ring damage",
+      "component": "Hydraulic cylinder"
+    }
+  },
+  {
+    "id": "FM31",
+    "input_text": "I found that the bush on the shaft has come loose. This loosening was caused by excessive vibration during operation. The loose bush is causing loose coupling between components.",
+    "expected_output": {
+      "failure_mode": "Bush loose on shaft",
+      "effect": "Loose coupling",
+      "cause": "Vibration", 
+      "component": "Shaft"
+    }
+  },
+  {
+    "id": "FM46", 
+    "input_text": "The sensor array is providing inaccurate readings that don't match expected values. This inaccuracy is due to calibration drift that has occurred over time. These incorrect readings are providing us with incorrect data for decision making.",
+    "expected_output": {
+      "failure_mode": "Inaccurate Readings",
+      "effect": "Incorrect data",
+      "cause": "Calibration drift",
+      "component": "Sensor Array"
+    }
+  },
+  {
+    "id": "FM40",
+    "input_text": "The conveyor belt has torn, likely due to overloading or poor maintenance practices. This belt tearing is causing significant disruption in our material handling operations and stopping production flow.",
+    "expected_output": {
+      "failure_mode": "Tearing of belt", 
+      "effect": "Disruption in material handling",
+      "cause": "Overloading or poor maintenance", 
+      "component": "Conveyor Belt"
+    }
+  },
+  {
+    "id": "FM19",
+    "input_text": "The cylinder arm of the pusher assembly is over-traveling beyond its normal range. This over-travel is due to bad control system settings. As a result, it's creating dents on the bottles being processed.",
+    "expected_output": {
+      "failure_mode": "Over travel in cylinder arm",
+      "effect": "Dents on bottles",
+      "cause": "Bad control",
+      "component": "Pusher assembly"
+    }
+  },
+  {
+    "id": "FM38",
+    "input_text": "Our control system experienced a software glitch that caused unexpected behavior. This glitch appears to be due to software aging or bugs that have developed over time. The glitch resulted in a complete system shutdown.",
+    "expected_output": {
+      "failure_mode": "Software Glitch", 
+      "effect": "System shutdown",
+      "cause": "Software aging or bugs",
+      "component": "Control System"
+    }
+  },
+  {
+    "id": "FM52", 
+    "input_text": "The gas detector sensor has failed and is no longer detecting hazardous gases. This failure was caused by exposure to extreme environmental conditions that exceeded the sensor's specifications. The sensor failure means we've lost our hazard detection capability.",
+    "expected_output": {
+      "failure_mode": "Sensor Failure",
+      "effect": "Failed hazard detection", 
+      "cause": "Exposure to extreme conditions",
+      "component": "Gas Detector"
+    }
+  },
+  {
+    "id": "FM39",
+    "input_text": "The pump impeller shows significant wear patterns from normal wear and tear over its service life. This impeller wear is reducing the pump's efficiency and affecting its performance.", 
+    "expected_output": {
+      "failure_mode": "Impeller Wear",
+      "effect": "Reduced pump efficiency",
+      "cause": "Normal wear and tear",
+      "component": "Pump System"
+    }
+  },
+  {
+    "id": "FM26",
+    "input_text": "The rod seals in the pusher assembly have become damaged due to excessive side loading forces. This damage is allowing contaminants to enter the pusher cylinder between the shaft and cylinder walls.",
+    "expected_output": {
+      "failure_mode": "Damaged rod seals", 
+      "effect": "Contaminates entering pusher cylinder between shaft and cylinder",
+      "cause": "Excessive side loading",
+      "component": "Pusher assembly"
+    }
+  },
+  {
+    "id": "FM58", 
+    "input_text": "The robot on the assembly line has become misaligned and is no longer positioned correctly. This misalignment is due to wear and tear of the mechanical components over time. The misalignment is causing product defects in our manufacturing process.",
+    "expected_output": {
+      "failure_mode": "Robot Misalignment",
+      "effect": "Product defects", 
+      "cause": "Wear and tear",
+      "component": "Assembly Line"
+    }
+  },
+  {
+    "id": "FM104",
+    "input_text": "The forklift tire is leaking air due to overloading the vehicle beyond its rated capacity. This tire leaking is preventing the forklift from moving properly and making it inoperative.",
+    "expected_output": {
+      "failure_mode": "Tire leaking due to overload",
+      "effect": "Forklift not moving", 
+      "cause": "Load was Overload",
+      "component": "Tires"
+    }
+  },
+  {
+    "id": "FM133",
+    "input_text": "The fuel valve is dripping fuel due to oversized injection mechanisms that aren't sealing properly. This dripping is causing sticking of piston rings in their grooves and creating fire blow conditions.",
+    "expected_output": {
+      "failure_mode": "Dripping",
+      "effect": "Sticking of piston rings in their grooves, fire blow",
+      "cause": "Oversized injection mechanisms", 
+      "component": "Fuel Valve"
+    }
+  }
+]

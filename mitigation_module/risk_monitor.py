@@ -41,8 +41,10 @@ def scan_news_for_risk(target_city):
         df['combined_text'] = df['combined_text'].str.lower()
         
         # 3. Filter for the Target City
-        # We look for the city name in the text
-        city_news = df[df['combined_text'].str.contains(target_city.lower())]
+        # We look for the city name in the text. Treat the input as a literal
+        # string (no regex interpretation) to avoid misinterpreting characters
+        # like ".", "+", "&", etc.
+        city_news = df[df['combined_text'].str.contains(target_city.lower(), regex=False)]
         
         if city_news.empty:
             print(f"[RISK MONITOR] No news found for {target_city}. Route is clear.")

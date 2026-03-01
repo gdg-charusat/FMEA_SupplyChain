@@ -4,60 +4,44 @@ DYNAMIC NETWORK CONFIGURATION - NO HARDCODING
 All routes are generated dynamically based on warehouse and hub configuration
 """
 
+import os
+import yaml
+
+# Get the path to the config file
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_CONFIG_PATH = os.path.join(_BASE_DIR, 'config', 'network.yaml')
+
+# Load the configuration once
+try:
+    with open(_CONFIG_PATH, 'r') as f:
+        _config = yaml.safe_load(f) or {}
+except (yaml.YAMLError, IOError) as e:
+    print(f"CRITICAL ERROR: Failed to load network configuration from {_CONFIG_PATH}")
+    print(f"Error details: {e}")
+    _config = {}
+
 # =========================================
 # DYNAMIC WAREHOUSE CONFIGURATION
 # =========================================
-# Can be expanded dynamically - just add warehouses here!
-WAREHOUSES = {
-    "Warehouse_North": {"capacity": 3000, "location": "North", "priority": 1},
-    "Warehouse_South": {"capacity": 3000, "location": "South", "priority": 2},
-    "Warehouse_East": {"capacity": 2500, "location": "East", "priority": 3},
-    "Warehouse_West": {"capacity": 2500, "location": "West", "priority": 4},
-    "Warehouse_Central": {"capacity": 3500, "location": "Central", "priority": 5}
-}
+WAREHOUSES = _config.get('warehouses', {})
 
 # =========================================
 # INTERMEDIATE DISTRIBUTION HUBS
-# For multi-hop routing optimization
 # =========================================
-DISTRIBUTION_HUBS = {
-    "Hub_Northeast": {"location": "Northeast", "max_throughput": 5000},
-    "Hub_Midwest": {"location": "Midwest", "max_throughput": 4500},
-    "Hub_Southeast": {"location": "Southeast", "max_throughput": 4000}
-}
+DISTRIBUTION_HUBS = _config.get('distribution_hubs', {})
 
 # =========================================
 # PREDEFINED CITIES (Legacy Support)
-# Default demand for known cities
 # =========================================
-DEMAND_REQ = {
-    "Boston": 250, 
-    "New York": 400, 
-    "Chicago": 300, 
-    "Philadelphia": 400, 
-    "Miami": 200, 
-    "Dallas": 350
-}
+DEMAND_REQ = _config.get('demand_req', {})
 
 # =========================================
 # DYNAMIC ROUTE GENERATION
-# Routes are NO LONGER hardcoded!
-# They are generated dynamically in dynamic_network.py
 # =========================================
 # Legacy route_map for backward compatibility (Routes 1-10)
-# These are the ONLY hardcoded routes (for CSV data compatibility)
-route_map = {
-    1: ("Warehouse_North", "Boston"),
-    2: ("Warehouse_North", "New York"),
-    3: ("Warehouse_North", "Chicago"),
-    4: ("Warehouse_South", "Boston"),
-    5: ("Warehouse_North", "Philadelphia"),
-    6: ("Warehouse_South", "Chicago"),
-    7: ("Warehouse_South", "New York"),
-    8: ("Warehouse_South", "Philadelphia"),
-    9: ("Warehouse_North", "Miami"),
-    10: ("Warehouse_North", "Dallas")
-}
+route_map = {}
+for k, v in _config.get('route_map', {}).items():
+    route_map[int(k)] = tuple(v)
 
 # Primary routes (for risk application logic)
 PRIMARY_ROUTES = {1, 2, 3, 5, 9, 10}

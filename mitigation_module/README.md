@@ -1,271 +1,431 @@
-# Supply Chain Risk Mitigation Module
+# LLM-Powered Automated FMEA Generator
 
-## Overview
-This module extends the FMEA Generator with real-time transport optimization capabilities. It uses Linear Programming to minimize transport costs while considering supply chain disruptions.
+<div align="center">
 
-## Mathematical Foundation
+![FMEA Generator](https://img.shields.io/badge/FMEA-Generator-blue)
+![Python](https://img.shields.io/badge/Python-3.9%2B-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+![Status](https://img.shields.io/badge/Status-Production-success)
 
-**Objective Function:**
+**An intelligent system that automatically generates Failure Mode and Effects Analysis (FMEA) from both structured and unstructured data using Large Language Models**
+
+</div>
+
+---
+
+## 📋 Table of Contents
+
+* [Overview](#overview)
+* [Features](#features)
+* [Architecture](#architecture)
+* [Installation](#installation)
+* [Quick Start](#quick-start)
+* [Usage](#usage)
+* [Configuration](#configuration)
+* [Project Structure](#project-structure)
+* [Examples](#examples)
+* [API Reference](#api-reference)
+* [FAQ](#-faq)
+* [Contributing](#contributing)
+* [License](#license)
+
+---
+
+## 🎯 Overview
+
+Traditional FMEA is manual, time-consuming, and expert-dependent. This system revolutionizes the process by:
+
+* **Automating extraction** of failure information from customer reviews, complaints, and reports
+* **Processing structured data** from Excel/CSV files
+* **Using LLMs** for intelligent semantic understanding
+* **Computing risk scores** (Severity, Occurrence, Detection)
+* **Generating actionable insights** with recommended actions
+
+### Problem Statement
+
+Organizations receive failure information in multiple formats:
+
+* Unstructured: Customer reviews, complaint text, incident reports
+* Structured: Excel spreadsheets, CSV files with failure data
+
+This system provides a **unified, intelligent solution** to convert all these inputs into a standardized FMEA.
+
+---
+
+## ✨ Features
+
+### Core Capabilities
+
+* ✅ **Dual Input Support**: Process both structured and unstructured data
+* 🤖 **LLM-Powered Extraction**: Uses Mistral/LLaMA/GPT models for intelligent entity extraction
+* 📊 **Automated Risk Scoring**: Calculates S, O, D scores and RPN automatically
+* 🎯 **Action Priority Classification**: Categorizes risks as Critical, High, Medium, Low
+* 📈 **Visual Analytics**: Interactive dashboards with charts and risk matrices
+* 💾 **Multiple Export Formats**: Excel, CSV, JSON
+* 🔄 **Hybrid Processing**: Combine multiple data sources seamlessly
+* 🚀 **Production-Ready**: Modular, extensible, well-documented code
+
+### Technical Features
+
+* **NLP Processing**: Sentiment analysis, keyword extraction, text cleaning
+* **Rule-Based Fallback**: Works even without LLM for faster processing
+* **Batch Processing**: Handle large datasets efficiently
+* **Deduplication**: Intelligent removal of similar failure modes
+* **Configurable**: YAML-based configuration for easy customization
+
+---
+
+## 🏗️ Architecture
+
 ```
-minimize: Σ Σ C_ij × x_ij
-```
-
-Where:
-- `i`: Warehouse indices (Sources)
-- `j`: Client indices (Destinations) 
-- `C_ij`: Unit transport cost (Distance × Cost per Km)
-- `x_ij`: Quantity transported (Decision Variable)
-
-**Constraints:**
-- Supply: `Σ x_ij ≤ Supply_i` (for each warehouse)
-- Demand: `Σ x_ij = Demand_j` (for each client)
-- Non-negativity: `x_ij ≥ 0`
-
-## Architecture
-
-```
-mitigation_module/
-├── __init__.py                 # Module exports
-├── network_config.py           # Network topology & constraints
-├── mapping_config.json         # Location → Route ID mapping
-├── mitigation_solver.py        # Linear Programming solver
-├── disruption_extractor.py     # Multimodal input processor
-└── gdelt_service.py           # Real-time news (⚠️ ON HOLD)
-```
-
-## Components
-
-### 1. Network Configuration (`network_config.py`)
-- Defines 10 transport routes
-- Maps 2 warehouses to 10 client locations
-- Specifies supply capacity (5000 units each)
-- Defines demand requirements per client
-
-### 2. Mitigation Solver (`mitigation_solver.py`)
-- Loads base costs from `Dataset_AI_Supply_Optimization.csv`
-- Applies disruption cost multipliers
-- Solves Linear Programming problem using `scipy.optimize.linprog`
-- Compares original vs. risk-adjusted plans
-
-### 3. Disruption Extractor (`disruption_extractor.py`)
-- **Input Types Supported:**
-  - Manual text
-  - CSV files
-  - Images (PNG/JPG via OCR)
-  - Historical news datasets
-  - Email/PDF (via text extraction)
-
-- **Output Format (Validated with Pydantic):**
-```json
-{
-  "target_route_id": 1,
-  "impact_type": "flood",
-  "cost_multiplier": 2.5,
-  "severity_score": 8
-}
-```
-
-### 4. GDELT Service (`gdelt_service.py`)
-⚠️ **STATUS: ON HOLD - Do not use yet**
-
-When activated, this will:
-1. Fetch latest 15-min GKG updates from GDELT
-2. Filter for themes: `ENV_FLOOD`, `STRIKE`, `NATURAL_DISASTER`, `TRANSPORTATION`
-3. Map locations to Route IDs
-4. Return real-time disruptions
-
-## Usage
-
-### Basic Usage (Manual Text)
-
-```python
-from mitigation_module import TransportOptimizer, DisruptionExtractor
-
-# 1. Extract disruptions
-extractor = DisruptionExtractor()
-events = extractor.extract_from_text(
-    "Major flood in Boston. I-95 closed. Port operations suspended."
-)
-
-# 2. Optimize transport
-optimizer = TransportOptimizer()
-optimizer.apply_disruptions([e.to_dict() for e in events])
-
-# 3. Compare plans
-result = optimizer.compare_plans()
-
-print(f"Original Cost: ${result['original_cost']:,.2f}")
-print(f"Adjusted Cost: ${result['adjusted_cost']:,.2f}")
-print(f"Increase: {result['cost_delta_pct']:.1f}%")
-```
-
-### CSV Input
-
-```python
-# CSV with columns: target_route_id, impact_type, cost_multiplier, severity_score
-events = extractor.extract_from_csv("disruptions.csv")
+User Input (Text/CSV/Excel)
+         ↓
+┌────────────────────┐
+│  Data Preprocessing │ ← Text cleaning, validation, sentiment analysis
+└────────────────────┘
+         ↓
+┌────────────────────┐
+│  LLM Extraction     │ ← Extract: Failure Mode, Effect, Cause, Component
+└────────────────────┘
+         ↓
+┌────────────────────┐
+│  Risk Scoring       │ ← Calculate: Severity, Occurrence, Detection
+└────────────────────┘
+         ↓
+┌────────────────────┐
+│  FMEA Generator     │ ← Compute RPN, prioritize, recommend actions
+└────────────────────┘
+         ↓
+┌────────────────────┐
+│  Output & Export    │ ← Dashboard, Excel, CSV, JSON
+└────────────────────┘
 ```
 
-### Image Input (OCR)
+---
 
-```python
-events = extractor.extract_from_image("logistics_alert.png")
-```
+## 🚀 Installation
 
-### Historical News Analysis
+### Prerequisites
 
-```python
-import pandas as pd
+* Python 3.9 or higher
+* 8GB RAM minimum (16GB recommended for LLM)
+* GPU (optional, for faster LLM inference)
 
-news_df = pd.read_json('News_Category_Dataset_v3.json', lines=True)
-events = extractor.extract_from_news(news_df, ['BUSINESS', 'WORLD NEWS'])
-```
-
-## Streamlit Integration
-
-The module is integrated as a new tab in the main dashboard:
-
-**🚚 Supply Chain Risk Tab:**
-1. Choose input method (Text, CSV, Image, News)
-2. System extracts disruptions
-3. Click "Calculate Optimized Transport Plan"
-4. View Risk Dashboard with:
-   - Original vs. Adjusted costs
-   - Cost delta and percentage increase
-   - Quantity (x_ij) flow changes per route
-
-## Dependencies
+### Step 1: Clone Repository
 
 ```bash
-pip install scipy pandas pydantic requests
-pip install easyocr  # For OCR support
+git clone <repository-url>
+cd Symboisis
 ```
 
-## Network Topology
+### Step 2: Create Virtual Environment
 
-**Warehouses (Sources):**
-- Warehouse_North (Capacity: 5000 units)
-- Warehouse_South (Capacity: 5000 units)
+```bash
+# Windows
+python -m venv venv
+venv\Scripts\activate
 
-**Clients (Destinations):**
-| Client | Demand | Routes from North | Routes from South |
-|--------|--------|-------------------|-------------------|
-| Boston | 800 | Route 1 | - |
-| New York | 1200 | Route 2 | - |
-| Philadelphia | 600 | Route 3 | - |
-| Chicago | 1000 | Route 4 | - |
-| Detroit | 700 | Route 5 | - |
-| Miami | 900 | - | Route 6 |
-| Atlanta | 1100 | - | Route 7 |
-| Houston | 800 | - | Route 8 |
-| Dallas | 950 | - | Route 9 |
-| Phoenix | 750 | - | Route 10 |
+# Linux/Mac
+python3 -m venv venv
+source venv/bin/activate
+```
 
-**Total Demand:** 8,800 units
-**Total Supply:** 10,000 units
-**Surplus:** 1,200 units
+### Step 3: Install Dependencies
 
-## Location Mapping Examples
+```bash
+pip install -r requirements.txt
+```
 
-The `mapping_config.json` maps text mentions to Route IDs:
+### Step 4: Download NLTK Data
 
-- "Boston" → Route 1
-- "I-95" → Routes 1, 2, 3, 6, 7
-- "Northeast" → Routes 1, 2, 3
-- "Port of Houston" → Route 8
+```bash
+python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('averaged_perceptron_tagger')"
+```
 
-## Impact Types & Default Multipliers
+### Step 5: (Optional) Install spaCy Model
 
-| Impact Type | Default Multiplier | Severity Range |
-|-------------|-------------------|----------------|
-| flood | 2.5× | 7-10 |
-| strike | 1.8× | 5-8 |
-| accident | 1.5× | 4-7 |
-| weather | 2.0× | 6-9 |
-| port_closure | 3.0× | 8-10 |
-| natural_disaster | 3.5× | 9-10 |
+```bash
+python -m spacy download en_core_web_sm
+```
 
-## Integration with FMEA
+### Step 6: Configure Environment
 
-**Zero-Disruption Design:**
-- All supply chain logic in `/mitigation_module/`
-- No modifications to existing FMEA code
-- Shared OCR capabilities
-- Independent session state
+```bash
+# Copy example environment file
+copy .env.example .env
 
-**Workflow:**
-1. Generate FMEA for failure analysis
-2. Switch to Supply Chain Risk tab
-3. Input disruption events
-4. Optimize transport plan
-5. Export both reports
+# Edit .env with your settings (optional)
+```
 
-## Validation
+---
 
-All disruptions are validated using Pydantic:
+## ⚡ Quick Start
+
+### 🎯 Working with YOUR Data (FMEA.csv + Car Reviews)
+
+**FASTEST WAY - Process your actual datasets:**
+
+```bash
+python process_my_data.py
+```
+
+This will automatically process:
+
+* ✅ Your FMEA.csv (161 industrial failure modes)
+* ✅ Car reviews from archive (3) folder (Ford, Toyota, Honda)
+* ✅ Create hybrid analysis combining both
+* ✅ Export all results to `output/` folder
+
+📖 **See YOUR_DATA_GUIDE.md for detailed instructions on working with your datasets!**
+
+---
+
+### Option 1: Web Dashboard (Recommended)
+
+```bash
+streamlit run app.py
+```
+
+Navigate to `http://localhost:8501` in your browser.
+
+### Option 2: Command Line
+
+```bash
+# From unstructured text
+python cli.py --text reviews.csv --output fmea_output.xlsx
+
+# From structured data
+python cli.py --structured failures.csv --output fmea_output.xlsx
+
+# Hybrid mode
+python cli.py --text reviews.csv --structured failures.csv --output fmea_output.xlsx
+```
+
+### Option 3: Run Examples
+
+```bash
+python examples.py
+```
+
+This will run 3 demonstration examples and generate sample FMEAs.
+
+---
+
+## 📖 Usage
+
+### 1. Using the Web Dashboard
+
+1. **Start the dashboard**: `streamlit run app.py`
+2. **Select input type**: Unstructured, Structured, or Hybrid
+3. **Upload files** or paste text
+4. **Click "Generate FMEA"**
+5. **View results**: Metrics, tables, charts
+6. **Export**: Download as Excel or CSV
+
+### 2. Using Python API
+
 ```python
-class DisruptionEvent(BaseModel):
-    target_route_id: int = Field(ge=1, le=10)
-    impact_type: str
-    cost_multiplier: float = Field(ge=1.0, le=10.0)
-    severity_score: int = Field(ge=1, le=10)
+from fmea_generator import FMEAGenerator
+import yaml
+
+# Load configuration
+with open('config/config.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+
+# Initialize generator
+generator = FMEAGenerator(config)
+
+# Generate from text
+reviews = ["Brake failure on highway...", "Engine overheated..."]
+fmea_df = generator.generate_from_text(reviews, is_file=False)
+
+# Generate from structured file
+fmea_df = generator.generate_from_structured('data.csv')
+
+# Export
+generator.export_fmea(fmea_df, 'output/fmea.xlsx', format='excel')
 ```
 
-This ensures clean mathematical inputs even from messy real-world data (OCR, emails, etc.).
+### 3. Using CLI
 
-## Future Enhancements
+```bash
+# Basic usage
+python cli.py --text input.csv --output result.xlsx
 
-### Phase 1 (Current)
-- ✅ Manual text input
-- ✅ CSV upload
-- ✅ Image OCR
-- ✅ Historical news analysis
-- ✅ Linear Programming solver
-- ✅ Streamlit dashboard
+# With summary report
+python cli.py --text input.csv --output result.xlsx --summary
 
-### Phase 2 (Activate on request)
-- ⏸️ GDELT real-time news integration
-- ⏸️ Claude 3.5 Sonnet API for extraction
-- ⏸️ Email/PDF parsing
-- ⏸️ Multi-period optimization
-- ⏸️ Stochastic programming for uncertainty
+# Faster rule-based mode (no LLM)
+python cli.py --text input.csv --output result.xlsx --no-model
 
-## Accuracy Strategy
+# Custom configuration
+python cli.py --text input.csv --config custom_config.yaml --output result.xlsx
+```
 
-**Current (Rule-Based):**
-- Location mapping: ~80-85% accuracy
-- Impact type detection: ~75-80%
-- Cost multiplier estimation: ±20% range
+---
 
-**Future (Claude 3.5 Sonnet):**
-- Target extraction accuracy: 95-97%
-- JSON format adherence: 99%+
-- Reasoning quality: Superior
+## ⚙️ Configuration
 
-## Example Scenarios
+Edit `config/config.yaml` to customize:
 
-### Scenario 1: Regional Flood
-**Input:** "Severe flooding in Northeast corridor. I-95 closed indefinitely."
+### Model Settings
 
-**Output:**
-- Routes affected: 1, 2, 3 (Boston, NY, Philadelphia)
-- Cost multiplier: 2.5×
-- Severity: 8/10
+```yaml
+model:
+  name: "mistralai/Mistral-7B-Instruct-v0.2"
+  max_length: 512
+  temperature: 0.3
+  device: "auto"
+  quantization: true
+```
 
-**Result:** Optimizer reroutes through southern warehouses, increasing total cost by 15-20%
+### Risk Scoring Parameters
 
-### Scenario 2: Port Strike
-**Input:** "Port of Houston workers on strike. Operations halted."
+```yaml
+risk_scoring:
+  severity:
+    high_keywords: ["critical", "catastrophic", "severe"]
+    medium_keywords: ["moderate", "significant"]
+    low_keywords: ["minor", "slight"]
+    default: 5
+```
 
-**Output:**
-- Route affected: 8 (Houston)
-- Cost multiplier: 1.8×
-- Severity: 6/10
+### Text Processing
 
-**Result:** Redistribution to Dallas/Phoenix routes, 8-12% cost increase
+```yaml
+text_processing:
+  min_review_length: 10
+  negative_threshold: 0.3
+  max_reviews_per_batch: 100
+  enable_sentiment_filter: true
+```
 
-## License
-Part of the FMEA Generator project.
+---
 
-## Contact
-For questions about activation of GDELT service or Claude 3.5 integration, please consult documentation.
+## 📁 Project Structure
+
+```
+Symboisis/
+├── src/
+│   ├── preprocessing.py
+│   ├── llm_extractor.py
+│   ├── risk_scoring.py
+│   ├── fmea_generator.py
+│   └── utils.py
+├── config/
+│   └── config.yaml
+├── output/
+├── archive (3)/
+├── app.py
+├── cli.py
+├── examples.py
+├── requirements.txt
+├── .env.example
+└── README.md
+```
+
+---
+
+## 📊 Examples
+
+### Example 1: Customer Reviews
+
+```python
+reviews = [
+    "Brake failure during heavy rain, very dangerous!",
+    "Engine overheated and seized, no warning lights."
+]
+
+fmea_df = generator.generate_from_text(reviews, is_file=False)
+```
+
+| Failure Mode  | Effect            | Severity | Occurrence | Detection | RPN | Priority |
+| ------------- | ----------------- | -------- | ---------- | --------- | --- | -------- |
+| Brake failure | Unable to stop    | 10       | 7          | 8         | 560 | Critical |
+| Engine seized | Vehicle breakdown | 9        | 6          | 7         | 378 | High     |
+
+---
+
+## 🔌 API Reference
+
+(unchanged — keep existing content)
+
+---
+
+## ❓ FAQ
+
+### 1. I get `ModuleNotFoundError: No module named 'nltk'` — what do I do?
+
+This usually means dependencies or NLTK data were not installed correctly. Run `pip install -r requirements.txt` and then download the required datasets using:
+
+```bash
+python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('averaged_perceptron_tagger')"
+```
+
+These steps are also listed in SETUP.md.
+
+---
+
+### 2. The model takes forever to load / crashes with out-of-memory error
+
+Large LLM models require significant RAM/GPU memory. You can run the system in faster rule-based mode using the `--no-model` flag in CLI. You can also enable quantization in `config/config.yaml` (`quantization: true`) to reduce memory usage.
+
+---
+
+### 3. I get `Error: .env file not found`
+
+You need to create your environment file from the template. Copy `.env.example` to `.env` and edit it if needed:
+
+```bash
+copy .env.example .env
+```
+
+Most fields are optional unless you are using external APIs.
+
+---
+
+### 4. Streamlit opens but the dashboard is blank / shows no data
+
+The dashboard does not display results until data is provided. Upload a CSV/Excel file or use the sample data option available in the interface, then click **Generate FMEA**.
+
+---
+
+### 5. Can I use this without a GPU?
+
+Yes. The system works in CPU mode automatically if no GPU is available. Processing will be slower (see performance table in README), but rule-based mode can provide much faster results.
+
+---
+
+### 6. My CSV isn't being parsed correctly — wrong columns detected
+
+Ensure your dataset uses the required column names such as `failure_mode`, `effect`, `cause`, and `component`. Refer to `YOUR_DATA_GUIDE.md` for the expected format and examples.
+
+---
+
+### 7. What is RPN and what do the scores mean?
+
+RPN (Risk Priority Number) is calculated as **Severity × Occurrence × Detection**. Higher RPN values indicate higher risk and help prioritize which failures should be addressed first.
+
+---
+
+### 8. How do I contribute? Can I pick any issue?
+
+Please read `CONTRIBUTING.md` before starting. Most projects follow a claim-before-start workflow, meaning you should comment on an issue to get it assigned before working on it.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.

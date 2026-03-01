@@ -4,6 +4,7 @@ Allows running the system without the dashboard
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
 import yaml
@@ -91,7 +92,22 @@ Examples:
         action='store_true',
         help='Use rule-based extraction instead of LLM (faster, less accurate)'
     )
-    
+
+    parser.add_argument(
+        '--simulate-failure',
+        metavar='NODE',
+        type=str,
+        default=None,
+        help=(
+            'Simulate a supply chain node failure and generate an additional '
+            'disruption report.  NODE can be a Route ID (e.g. "5", "Route_5"), '
+            'a Product Category (e.g. "Fresh"), or a Traffic Conditions value '
+            '(e.g. "High").  The primary FMEA output (--output) is NOT affected; '
+            'the disruption report is written alongside it as '
+            '<stem>_disruption_<node>.xlsx.'
+        )
+    )
+
     args = parser.parse_args()
     
     # Validate inputs
@@ -163,6 +179,39 @@ Examples:
             print(f"   Effect: {row['Effect']}")
             print(f"   Recommended Action: {row['Recommended Action']}")
     
+    # Disruption simulation (optional)
+    if args.simulate_failure:
+        failed_node = args.simulate_failure
+        safe_node = re.sub(r'[^\w\-]', '_', failed_node)
+        disruption_path = output_path.stem + f"_disruption_{safe_node}.xlsx"
+        disruption_out = output_path.parent / disruption_path
+
+        print(f"\n🔴 Simulating failure of supply chain node: {failed_node}")
+
+        dataset_path = Path(__file__).parent / "Dataset_AI_Supply_Optimization.csv"
+
+        try:
+            from disruption_simulator import DisruptionSimulator
+        except ImportError as exc:
+            print(
+                f"\n⚠️  Could not import DisruptionSimulator: {exc}\n"
+                "Make sure src/disruption_simulator.py exists and dependencies "
+                "are installed.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        try:
+            sim = DisruptionSimulator(str(dataset_path))
+            sim.export_disruption_report(fmea_df, failed_node, str(disruption_out))
+            print(f"📊 Disruption report written to: {disruption_out}")
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"\n⚠️  Disruption simulation failed: {exc}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
     print("\n✨ Process completed successfully!")
 
 

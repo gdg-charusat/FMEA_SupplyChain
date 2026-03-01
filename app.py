@@ -23,6 +23,9 @@ from fmea_generator import FMEAGenerator
 from preprocessing import DataPreprocessor
 from llm_extractor import LLMExtractor
 from risk_scoring import RiskScoringEngine
+from ocr_processor import OCRProcessor
+from history_tracker import FMEAHistoryTracker
+from voice_input import VoiceInputProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -95,8 +98,17 @@ def load_config():
     """Load configuration from YAML file"""
     config_path = Path('config/config.yaml')
     if config_path.exists():
-        with open(config_path, 'r') as f:
-            return yaml.safe_load(f)
+        try:
+            with open(config_path, 'r') as f:
+                return yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            st.error(f"Error parsing configuration file: {e}")
+            logger.error(f"YAML parsing error: {e}")
+            return {}
+        except Exception as e:
+            st.error(f"Error reading configuration file: {e}")
+            logger.error(f"Error reading config: {e}")
+            return {}
     else:
         st.error("Configuration file not found!")
         return {}
@@ -221,6 +233,159 @@ def plot_top_risks(fmea_df, top_n=10):
     return fig
 
 
+def plot_severity_occurrence_heatmap(fmea_df):
+    """
+    Plot Severity vs Occurrence Risk Heatmap
+    X-axis: Occurrence (1-10)
+    Y-axis: Severity (1-10)
+    Cell color-coded by RPN intensity (Low: Green, Medium: Yellow, High: Red)
+    """
+    # Create heatmap array (use RPN values for color intensity)
+    heatmap_array = []
+    hover_text = []
+    
+    for severity in range(10, 0, -1):  # Reverse to show severity high at top
+        heatmap_row = []
+        hover_row = []
+        
+        for occurrence in range(1, 11):
+            cell_data = fmea_df[
+                (fmea_df['Severity'] == severity) & 
+                (fmea_df['Occurrence'] == occurrence)
+            ]
+            
+            if len(cell_data) > 0:
+                count = len(cell_data)
+                avg_rpn = cell_data['Rpn'].mean()
+                heatmap_row.append(avg_rpn)
+                hover_row.append(f"Severity: {severity}<br>Occurrence: {occurrence}<br>Count: {count}<br>Avg RPN: {avg_rpn:.1f}")
+            else:
+                heatmap_row.append(None)
+                hover_row.append(f"Severity: {severity}<br>Occurrence: {occurrence}<br>Count: 0<br>Avg RPN: N/A")
+        
+        heatmap_array.append(heatmap_row)
+        hover_text.append(hover_row)
+    
+    # Create figure with color scale
+    fig = go.Figure(data=go.Heatmap(
+        z=heatmap_array,
+        x=list(range(1, 11)),
+        y=list(range(10, 0, -1)),
+        hovertext=hover_text,
+        hoverinfo="text",
+        colorscale=[
+            [0, '#2ca02c'],      # Green - Low Risk
+            [0.3, '#2ca02c'],
+            [0.4, '#ffbb78'],    # Yellow - Medium Risk
+            [0.6, '#ffbb78'],
+            [0.7, '#ff7f0e'],    # Orange - High Risk
+            [0.85, '#d62728'],   # Red - Critical Risk
+            [1, '#8B0000']       # Dark Red - Extreme Risk
+        ],
+        colorbar=dict(title="Average RPN")
+    ))
+    
+    fig.update_layout(
+        title='Risk Heatmap: Severity vs Occurrence',
+        xaxis_title='Occurrence (1-10)',
+        yaxis_title='Severity (1-10)',
+        height=700,
+        width=700
+    )
+    
+    return fig
+
+
+def get_critical_risks(fmea_df, rpn_threshold=250):
+    """
+    Get critical risks exceeding RPN threshold
+    
+    Args:
+        fmea_df: FMEA DataFrame
+        rpn_threshold: RPN threshold for critical risks
+        
+    Returns:
+        DataFrame with critical risks and count
+    """
+    critical_risks = fmea_df[fmea_df['Rpn'] >= rpn_threshold]
+    return critical_risks, len(critical_risks)
+
+
+def display_risk_summary_panel(fmea_df, rpn_threshold=250):
+    """
+    Display Risk Summary Panel with key metrics
+    
+    Args:
+        fmea_df: FMEA DataFrame
+        rpn_threshold: RPN threshold for critical risks
+    """
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # Total failure modes
+    with col1:
+        st.metric(
+            label="📊 Total Failure Modes",
+            value=len(fmea_df)
+        )
+    
+    # Critical risk count
+    critical_risks, critical_count = get_critical_risks(fmea_df, rpn_threshold)
+    with col2:
+        st.metric(
+            label="🔴 Critical Risks (RPN ≥ threshold)",
+            value=critical_count,
+            delta="High Priority" if critical_count > 0 else None
+        )
+    
+    # Average RPN
+    with col3:
+        avg_rpn = fmea_df['Rpn'].mean()
+        st.metric(
+            label="📈 Average RPN",
+            value=f"{avg_rpn:.1f}"
+        )
+    
+    # Highest RPN entry
+    with col4:
+        max_rpn = fmea_df['Rpn'].max()
+        max_idx = fmea_df['Rpn'].idxmax()
+        if pd.notna(max_idx):
+            highest_failure = fmea_df.loc[max_idx, 'Failure Mode']
+            st.metric(
+                label="⚠️ Highest RPN",
+                value=int(max_rpn),
+                delta=f"{highest_failure[:30]}..." if len(str(highest_failure)) > 30 else highest_failure
+            )
+        else:
+            st.metric(
+                label="⚠️ Highest RPN",
+                value=int(max_rpn)
+            )
+
+
+def display_critical_alert_banner(fmea_df, rpn_threshold=250):
+    """
+    Display alert banner for critical risks
+    
+    Args:
+        fmea_df: FMEA DataFrame
+        rpn_threshold: RPN threshold for critical risks
+    """
+    critical_risks, critical_count = get_critical_risks(fmea_df, rpn_threshold)
+    
+    if critical_count > 0:
+        alert_message = f"⚠️ **CRITICAL ALERT**: {critical_count} failure mode(s) exceed RPN threshold of {rpn_threshold}. Immediate action required!"
+        st.error(alert_message)
+        
+        # Show details of critical risks
+        with st.expander("🔍 View Critical Risks Details"):
+            critical_display = critical_risks[['Failure Mode', 'Effect', 'Severity', 'Occurrence', 'Detection', 'Rpn', 'Action Priority']].copy()
+            critical_display = critical_display.sort_values('Rpn', ascending=False)
+            st.dataframe(critical_display, use_container_width=True, height=300)
+    
+    return critical_count > 0
+
+
 def extract_text_from_image(image_file):
     """Extract text from image using OCR"""
     try:
@@ -276,6 +441,22 @@ def extract_text_from_image(image_file):
         return f"Error extracting text from image: {str(e)}\n\nDetails: {error_details}"
 
 
+def render_pdf_preview(pdf_bytes):
+    """Render the first page of a PDF as an image for preview."""
+    try:
+        import fitz
+        from PIL import Image as PILImage
+
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            if doc.page_count == 0:
+                return None
+            page = doc.load_page(0)
+            pix = page.get_pixmap(dpi=150, colorspace=fitz.csRGB)
+            return PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    except Exception:
+        return None
+
+
 def main():
     """Main application"""
     
@@ -296,7 +477,7 @@ def main():
         st.markdown("### 📊 Input Options")
         input_type = st.radio(
             "Select Input Type:",
-            ["Unstructured Text", "Structured File (CSV/Excel)", "Hybrid (Both)"]
+            ["Unstructured Text", "Structured File (CSV/Excel)", "Hybrid (Both)", "📷 Scan Document (OCR)", "🎙️ Voice Input"]
         )
         
         st.markdown("---")
@@ -318,6 +499,18 @@ def main():
         # Output format
         output_format = st.selectbox("Export Format:", ["Excel", "CSV"])
         
+        # Whisper model size (shown when Voice Input selected)
+        if input_type == "🎙️ Voice Input":
+            st.markdown("---")
+            st.markdown("### 🎙️ Voice Settings")
+            whisper_model_size = st.selectbox(
+                "Whisper Model Size:",
+                ["tiny (~39 MB)", "base (~140 MB)", "small (~461 MB)", "medium (~1.5 GB)"],
+                index=1
+            )
+            # Extract just the model name
+            st.session_state['whisper_model_size'] = whisper_model_size.split(" ")[0]
+        
         st.markdown("---")
         st.markdown("### 📖 About")
         st.info("""
@@ -334,14 +527,47 @@ def main():
         """)
     
     # Main content area
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📝 Generate FMEA", 
         "🎯 PFMEA Generator", 
         "🚚 Supply Chain Risk",
-        "📊 Analytics", 
+        "📊 Analytics",
+        "📈 History & Trends",
         "ℹ️ Help"
     ])
     
+    # --- Constants for input validation ---
+    MAX_FILE_SIZE_MB = 200
+    MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+    ALLOWED_IMAGE_TYPES = ['png', 'jpg', 'jpeg']
+    ALLOWED_TEXT_TYPES = ['txt', 'doc', 'docx', 'pdf']
+    ALLOWED_STRUCTURED_TYPES = ['csv', 'xlsx', 'xls']
+    ALLOWED_OCR_TYPES = ['jpg', 'jpeg', 'png', 'pdf']
+
+    def validate_uploaded_file(uploaded_file, allowed_types, max_size_bytes=MAX_FILE_SIZE_BYTES, max_size_mb=MAX_FILE_SIZE_MB):
+        """Validate an uploaded file for size, emptiness, and type.
+        Returns (is_valid, error_message). If valid, error_message is None."""
+        if uploaded_file is None:
+            return False, "⚠️ Please upload a file before generating FMEA."
+        if uploaded_file.size == 0:
+            return False, "⚠️ The uploaded file is empty (0 bytes). Please upload a valid file."
+        if uploaded_file.size > max_size_bytes:
+            size_mb = uploaded_file.size / (1024 * 1024)
+            return False, f"⚠️ File size ({size_mb:.1f} MB) exceeds the {max_size_mb} MB limit. Please upload a smaller file."
+        file_ext = uploaded_file.name.split('.')[-1].lower()
+        if file_ext not in allowed_types:
+            return False, f"⚠️ Unsupported file format '.{file_ext}'. Allowed types: {', '.join(allowed_types)}."
+        return True, None
+
+    def show_file_info(uploaded_file):
+        """Display file upload success info."""
+        size_kb = uploaded_file.size / 1024
+        if size_kb > 1024:
+            size_str = f"{size_kb / 1024:.1f} MB"
+        else:
+            size_str = f"{size_kb:.1f} KB"
+        st.success(f"✅ File uploaded successfully: **{uploaded_file.name}** ({size_str})")
+
     with tab1:
         st.markdown('<div class="sub-header">Generate FMEA</div>', unsafe_allow_html=True)
         
@@ -353,14 +579,57 @@ def main():
             
             if text_input_method == "Upload File":
                 uploaded_file = st.file_uploader(
+<<<<<<< ocrSpecificMessage
+                    "Upload a text document (TXT, DOC, DOCX, PDF)",
+                    type=['txt', 'doc', 'docx', 'pdf'],
+                    help=f"Supported formats: TXT, DOC, DOCX, PDF. Max size: {MAX_FILE_SIZE_MB} MB."
+=======
                     "Upload image file (PNG, JPEG) - OCR will extract text",
-                    type=['png', 'jpg', 'jpeg']
+                    type=['png', 'jpg', 'jpeg'],
+                    help=f"Supported formats: PNG, JPG, JPEG. Max size: {MAX_FILE_SIZE_MB} MB."
+>>>>>>> main
                 )
                 
                 if uploaded_file:
+                    # Validate uploaded file
+<<<<<<< ocrSpecificMessage
+                    is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_TEXT_TYPES)
+                    if not is_valid:
+                        st.error(error_msg)
+                        st.stop()
+=======
+                    is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_IMAGE_TYPES)
+                    if not is_valid:
+                        st.error(error_msg)
+                        st.stop()
+                    
+                    show_file_info(uploaded_file)
+
                     # Display uploaded image
                     col1, col2 = st.columns([1, 2])
+>>>>>>> main
                     
+
+                    show_file_info(uploaded_file)
+
+                    if st.button("🚀 Read File & Generate FMEA", type="primary"):
+                        with st.spinner("Reading text from file..."):
+                            file_name = uploaded_file.name.lower()
+                            try:
+                                if file_name.endswith('.txt'):
+                                    extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
+                                elif file_name.endswith('.pdf'):
+                                    import PyPDF2, io
+                                    reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.getvalue()))
+                                    extracted_text = "\n".join(
+                                        page.extract_text() or "" for page in reader.pages
+                                    )
+                                elif file_name.endswith(('.doc', '.docx')):
+                                    import docx, io
+                                    doc = docx.Document(io.BytesIO(uploaded_file.getvalue()))
+                                    extracted_text = "\n".join(
+                                        para.text for para in doc.paragraphs
+                                    )
                     with col1:
                         st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
                     
@@ -374,15 +643,50 @@ def main():
                                 st.markdown("**Extracted Text:**")
                                 st.text_area("", extracted_text, height=150, key="extracted", disabled=True)
                                 
-                                if "Error" not in extracted_text and "No text found" not in extracted_text:
+                                # Validate OCR output
+                                if not extracted_text or not extracted_text.strip():
+                                    st.error("⚠️ OCR failed to extract any readable text from the image. Please upload a clearer image.")
+                                    st.stop()
+                                elif "Error" in extracted_text or "No text found" in extracted_text:
+                                    st.error(extracted_text)
+                                    st.stop()
+                                else:
                                     with st.spinner("Generating FMEA from extracted text..."):
                                         generator = initialize_generator(config)
                                         # Split text into lines
                                         texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
+                                        if not texts:
+                                            st.error("⚠️ OCR extracted text contains no usable content. Please try a different image.")
+                                            st.stop()
                                         fmea_df = generator.generate_from_text(texts, is_file=False)
                                         st.session_state['fmea_df'] = fmea_df
+                else:
+                    st.info("📤 Please upload an image file (PNG, JPG, JPEG) to begin.")
+                                        st.session_state['fmea_saved'] = False
                                 else:
-                                    st.error(extracted_text)
+                                    extracted_text = uploaded_file.getvalue().decode('utf-8', errors='replace')
+                            except Exception as e:
+                                st.error(f"⚠️ Failed to read file: {e}")
+                                st.stop()
+                            
+                            # Show extracted text
+                            st.markdown("**Extracted Text:**")
+                            st.text_area("", extracted_text, height=150, key="extracted", disabled=True)
+                            
+                            if not extracted_text or not extracted_text.strip():
+                                st.error("⚠️ The file contains no readable text. Please upload a different file.")
+                                st.stop()
+                            else:
+                                with st.spinner("Generating FMEA from text..."):
+                                    generator = initialize_generator(config)
+                                    texts = [line.strip() for line in extracted_text.split('\n') if line.strip()]
+                                    if not texts:
+                                        st.error("⚠️ No usable text content found in the file. Please try a different file.")
+                                        st.stop()
+                                    fmea_df = generator.generate_from_text(texts, is_file=False)
+                                    st.session_state['fmea_df'] = fmea_df
+                else:
+                    st.info("📤 Please upload a text document (TXT, DOC, DOCX, PDF) to begin.")
             else:
                 text_input = st.text_area(
                     "Enter text (reviews, reports, complaints):",
@@ -390,20 +694,189 @@ def main():
                     placeholder="Paste customer reviews, failure reports, or complaint text here..."
                 )
                 
-                if text_input and st.button("🚀 Generate FMEA", type="primary"):
+                generate_btn = st.button("🚀 Generate FMEA", type="primary")
+                if generate_btn:
+                    if not text_input or not text_input.strip():
+                        st.error("⚠️ Text input cannot be empty. Please enter reviews, reports, or complaint text before generating FMEA.")
+                        st.stop()
+                    texts = [line.strip() for line in text_input.split('\n') if line.strip()]
+                    if not texts:
+                        st.error("⚠️ No usable text found. Please enter valid content (not just whitespace or empty lines).")
+                        st.stop()
                     with st.spinner("Analyzing text and generating FMEA..."):
                         generator = initialize_generator(config)
-                        texts = [line.strip() for line in text_input.split('\n') if line.strip()]
                         fmea_df = generator.generate_from_text(texts, is_file=False)
                         st.session_state['fmea_df'] = fmea_df
+                        st.session_state['fmea_saved'] = False
+
+        elif input_type == "📷 Scan Document (OCR)":
+            st.markdown("**Upload an image or PDF for OCR extraction:**")
+            uploaded_ocr_file = st.file_uploader(
+                "Upload JPG, JPEG, PNG, or PDF",
+                type=['jpg', 'jpeg', 'png', 'pdf'],
+                key='ocr_upload',
+                help=f"Supported formats: JPG, JPEG, PNG, PDF. Max size: {MAX_FILE_SIZE_MB} MB."
+            )
+
+            if uploaded_ocr_file:
+                # Validate uploaded file
+                is_valid, error_msg = validate_uploaded_file(uploaded_ocr_file, ALLOWED_OCR_TYPES)
+                if not is_valid:
+                    st.error(error_msg)
+                    st.stop()
+                
+                show_file_info(uploaded_ocr_file)
+
+                file_bytes = uploaded_ocr_file.getvalue()
+                file_name = uploaded_ocr_file.name.lower()
+                file_key = f"ocr_{uploaded_ocr_file.name}_{len(file_bytes)}_{uploaded_ocr_file.type}"
+
+                if st.session_state.get('ocr_source_key') != file_key:
+                    with st.spinner("Extracting text from document..."):
+                        try:
+                            processor = OCRProcessor()
+                            if file_name.endswith('.pdf'):
+                                extracted_text = processor.extract_text_from_pdf(file_bytes)
+                            else:
+                                extracted_text = processor.extract_text_from_image(file_bytes)
+
+                            st.session_state['ocr_source_key'] = file_key
+                            st.session_state['ocr_text'] = extracted_text
+                            st.session_state['ocr_edit'] = extracted_text
+                        except Exception as e:
+                            st.session_state['ocr_text'] = ""
+                            st.session_state['ocr_edit'] = ""
+                            st.error(f"OCR failed: {e}")
+
+                col1, col2 = st.columns([1, 1])
+
+                with col1:
+                    if file_name.endswith('.pdf'):
+                        preview_image = render_pdf_preview(file_bytes)
+                        if preview_image:
+                            st.image(preview_image, caption="PDF Preview", use_column_width=True)
+                        else:
+                            st.info("PDF uploaded. Preview not available.")
+                    else:
+                        st.image(uploaded_ocr_file, caption="Uploaded Image", use_column_width=True)
+
+                with col2:
+                    st.text_area(
+                        "Extracted Text (editable):",
+                        height=300,
+                        key='ocr_edit'
+                    )
+
+                if st.button("🚀 Generate FMEA", type="primary"):
+                    edited_text = st.session_state.get('ocr_edit', '').strip()
+                    if not edited_text:
+                        st.error("⚠️ OCR failed to extract readable text, or the text field is empty. Please review, manually add text, or upload a clearer document.")
+                        st.stop()
+                    else:
+                        texts = [line.strip() for line in edited_text.split('\n') if line.strip()]
+                        if not texts:
+                            st.error("⚠️ No usable text content found. Please add valid text before generating FMEA.")
+                            st.stop()
+                        with st.spinner("Generating FMEA from OCR text..."):
+                            generator = initialize_generator(config)
+                            fmea_df = generator.generate_from_text(texts, is_file=False)
+                            st.session_state['fmea_df'] = fmea_df
+<<<<<<< ocrSpecificMessage
+=======
+
+>>>>>>> main
+            else:
+                st.info("📤 Please upload an image or PDF document for OCR extraction.")
+                            st.session_state['fmea_saved'] = False
         
+        elif input_type == "🎙️ Voice Input":
+            st.markdown("**🎙️ Record your failure description:**")
+            st.info("Click the microphone button below, speak your failure description clearly, then click stop.")
+
+            try:
+                from audio_recorder_streamlit import audio_recorder
+                audio_bytes = audio_recorder(
+                    text="Click to record",
+                    recording_color="#e74c3c",
+                    neutral_color="#1f77b4",
+                    pause_threshold=3.0
+                )
+            except ImportError:
+                st.error("Audio recorder component not installed. Run: pip install audio-recorder-streamlit")
+                audio_bytes = None
+
+            if audio_bytes:
+                # Show audio playback
+                st.audio(audio_bytes, format="audio/wav")
+
+                # Transcribe with Whisper
+                whisper_size = st.session_state.get('whisper_model_size', 'base')
+                with st.spinner(f"Transcribing audio with Whisper ({whisper_size} model)..."):
+                    try:
+                        processor = VoiceInputProcessor(model_size=whisper_size)
+                        transcribed_text = processor.transcribe(audio_bytes)
+                    except Exception as e:
+                        st.error(f"Transcription failed: {e}")
+                        transcribed_text = ""
+
+                # Validate transcription
+                validation = processor.validate_transcription(transcribed_text)
+
+                if validation["valid"]:
+                    edited_text = st.text_area(
+                        "Review and correct transcription before generating FMEA:",
+                        value=transcribed_text,
+                        height=150,
+                        key="voice_transcription"
+                    )
+
+                    if st.button("🚀 Generate FMEA from Voice Input", type="primary"):
+                        if not edited_text or not edited_text.strip():
+                            st.error("⚠️ Transcription text is empty. Please record again with a clear description.")
+                            st.stop()
+                        texts = [line.strip() for line in edited_text.split('\n') if line.strip()]
+                        if not texts:
+                            st.error("⚠️ No usable text found in the transcription. Please try again.")
+                            st.stop()
+                        with st.spinner("Generating FMEA from voice input..."):
+                            generator = initialize_generator(config)
+                            fmea_df = generator.generate_from_text(texts, is_file=False)
+                            st.session_state['fmea_df'] = fmea_df
+                else:
+                    st.error(f"⚠️ {validation['reason']}")
+                    st.warning("Please record again with a clear, longer description.")
+
         elif input_type == "Structured File (CSV/Excel)":
             uploaded_file = st.file_uploader(
                 "Upload structured FMEA file (CSV or Excel)",
-                type=['csv', 'xlsx', 'xls']
+                type=['csv', 'xlsx', 'xls'],
+                help=f"Supported formats: CSV, XLSX, XLS. Max size: {MAX_FILE_SIZE_MB} MB."
             )
             
             if uploaded_file:
+                # Validate uploaded file
+                is_valid, error_msg = validate_uploaded_file(uploaded_file, ALLOWED_STRUCTURED_TYPES)
+                if not is_valid:
+                    st.error(error_msg)
+                    st.stop()
+                
+                show_file_info(uploaded_file)
+
+                # Validate file content (not empty data)
+                try:
+                    file_ext = uploaded_file.name.split('.')[-1].lower()
+                    if file_ext == 'csv':
+                        check_df = pd.read_csv(uploaded_file)
+                    else:
+                        check_df = pd.read_excel(uploaded_file)
+                    uploaded_file.seek(0)  # Reset file pointer after reading
+                    if check_df.empty or len(check_df) == 0:
+                        st.error("⚠️ The uploaded file contains no data rows. Please upload a file with valid data.")
+                        st.stop()
+                except Exception as e:
+                    st.error(f"⚠️ Unable to read the file. It may be corrupted or in an unexpected format. Error: {e}")
+                    st.stop()
+
                 temp_path = Path(f"temp_{uploaded_file.name}")
                 with open(temp_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
@@ -413,8 +886,11 @@ def main():
                         generator = initialize_generator(config)
                         fmea_df = generator.generate_from_structured(str(temp_path))
                         st.session_state['fmea_df'] = fmea_df
+                        st.session_state['fmea_saved'] = False
                     
                     temp_path.unlink()
+            else:
+                st.info("📤 Please upload a CSV or Excel file to begin.")
         
         else:  # Hybrid
             st.markdown("**Upload both structured and unstructured data:**")
@@ -426,7 +902,8 @@ def main():
                 structured_file = st.file_uploader(
                     "Upload CSV/Excel",
                     type=['csv', 'xlsx', 'xls'],
-                    key='structured'
+                    key='structured',
+                    help=f"Supported formats: CSV, XLSX, XLS. Max size: {MAX_FILE_SIZE_MB} MB."
                 )
             
             with col2:
@@ -438,19 +915,55 @@ def main():
                     key='hybrid_text'
                 )
             
-            if (structured_file or unstructured_text) and st.button("🚀 Generate Hybrid FMEA", type="primary"):
+            generate_hybrid_btn = st.button("🚀 Generate Hybrid FMEA", type="primary")
+            if generate_hybrid_btn:
+                # Validate that at least one valid input is provided
+                has_valid_file = False
+                has_valid_text = False
+
+                if structured_file:
+                    is_valid, error_msg = validate_uploaded_file(structured_file, ALLOWED_STRUCTURED_TYPES)
+                    if not is_valid:
+                        st.error(error_msg)
+                        st.stop()
+                    has_valid_file = True
+                
+                if unstructured_text and unstructured_text.strip():
+                    has_valid_text = True
+                
+                if not has_valid_file and not has_valid_text:
+                    st.error("⚠️ Please provide at least one input: upload a structured file OR enter text manually.")
+                    st.stop()
+
+                # Validate structured file content if provided
+                if has_valid_file:
+                    show_file_info(structured_file)
+                    try:
+                        file_ext = structured_file.name.split('.')[-1].lower()
+                        if file_ext == 'csv':
+                            check_df = pd.read_csv(structured_file)
+                        else:
+                            check_df = pd.read_excel(structured_file)
+                        structured_file.seek(0)
+                        if check_df.empty or len(check_df) == 0:
+                            st.error("⚠️ The uploaded structured file contains no data rows.")
+                            st.stop()
+                    except Exception as e:
+                        st.error(f"⚠️ Unable to read the structured file. Error: {e}")
+                        st.stop()
+
                 with st.spinner("Processing hybrid data..."):
                     generator = initialize_generator(config)
                     
                     structured_path = None
                     text_data = None
                     
-                    if structured_file:
+                    if has_valid_file:
                         structured_path = Path(f"temp_structured_{structured_file.name}")
                         with open(structured_path, "wb") as f:
                             f.write(structured_file.getbuffer())
                     
-                    if unstructured_text:
+                    if has_valid_text:
                         # Convert text to list of lines
                         text_data = [line.strip() for line in unstructured_text.split('\n') if line.strip()]
                     
@@ -459,6 +972,7 @@ def main():
                         text_input=text_data if text_data else None
                     )
                     st.session_state['fmea_df'] = fmea_df
+                    st.session_state['fmea_saved'] = False
                     
                     # Cleanup
                     if structured_path:
@@ -468,7 +982,28 @@ def main():
         if 'fmea_df' in st.session_state:
             st.success("✅ FMEA Generated Successfully!")
             
+            # Auto-save the run (only once per generation to avoid duplicate saves on rerun)
+            if not st.session_state.get('fmea_saved', False):
+                tracker = FMEAHistoryTracker("history")
+                run_id = tracker.save_run(st.session_state['fmea_df'], label=f"Run {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                st.caption(f"💾 Run saved (ID: {run_id})")
+                st.session_state['fmea_saved'] = True
+            
             fmea_df = st.session_state['fmea_df']
+            
+            # ===== CRITICAL ALERT BANNER IN RESULTS SECTION =====
+            st.markdown("---")
+            st.markdown("### ⚠️ Critical Risk Alert")
+            
+            # Set a default threshold for results display
+            default_alert_threshold = 250
+            critical_risks_results, critical_count_results = get_critical_risks(fmea_df, default_alert_threshold)
+            
+            if critical_count_results > 0:
+                alert_msg = f"🚨 **ATTENTION**: {critical_count_results} failure mode(s) have RPN ≥ {default_alert_threshold}. Review the highlighted rows below."
+                st.error(alert_msg)
+            else:
+                st.info(f"✅ No critical risks detected. All failure modes have RPN < {default_alert_threshold}.")
             
             # Display metrics
             st.markdown("---")
@@ -480,7 +1015,7 @@ def main():
             st.markdown("### 📋 FMEA Table")
             
             # Add filtering options
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 priority_filter = st.multiselect(
                     "Filter by Priority:",
@@ -491,12 +1026,32 @@ def main():
             with col2:
                 rpn_threshold = st.slider("Minimum RPN:", 0, 1000, 0)
             
+            with col3:
+                highlight_critical = st.checkbox(
+                    "Highlight Critical Risks (RPN ≥ 250)",
+                    value=True,
+                    help="Visually highlight rows with critical RPN values"
+                )
+            
             filtered_df = fmea_df[
                 (fmea_df['Action Priority'].isin(priority_filter)) &
                 (fmea_df['Rpn'] >= rpn_threshold)
             ]
             
-            st.dataframe(filtered_df, use_container_width=True, height=400)
+            # Apply visual styling to highlight critical risks
+            display_df = filtered_df
+            if highlight_critical and not filtered_df.empty:
+                def highlight_critical_row(row):
+                    if row['Rpn'] >= 250:
+                        return ['background-color: #ffe6e6'] * len(row)  # Light red background
+                    elif row['Rpn'] >= 100:
+                        return ['background-color: #fff5e6'] * len(row)  # Light yellow background
+                    else:
+                        return [''] * len(row)  # No highlight
+                
+                display_df = filtered_df.style.apply(highlight_critical_row, axis=1)
+
+            st.dataframe(display_df, use_container_width=True, height=400)
             
             # Export options
             st.markdown("---")
@@ -659,6 +1214,7 @@ def main():
                             
                             # Store in session state for Analytics tab
                             st.session_state['fmea_df'] = combined_df
+                            st.session_state['fmea_saved'] = False
                             
                             st.success(f"✅ Generated {len(combined_df)} PFMEA record(s)")
                             
@@ -957,7 +1513,6 @@ def main():
                     
                     # Calculate detailed costs
                     from mitigation_module.dynamic_network import get_route_cost, get_full_route_map
-                    import pandas as pd
                     
                     # Load CSV for accurate costs
                     csv_path = 'Dataset_AI_Supply_Optimization.csv'
@@ -1225,6 +1780,41 @@ def main():
         if 'fmea_df' in st.session_state:
             fmea_df = st.session_state['fmea_df']
             
+            # ===== FEATURE 3: RISK SUMMARY PANEL =====
+            st.markdown("### 📊 Risk Summary Panel")
+            display_risk_summary_panel(fmea_df)
+            
+            st.markdown("---")
+            
+            # ===== FEATURE 2: THRESHOLD-BASED CRITICAL ALERT SYSTEM =====
+            st.markdown("### ⚠️ Critical Risk Alert System")
+            
+            # Add configurable RPN threshold
+            col_threshold1, col_threshold2 = st.columns([3, 1])
+            with col_threshold1:
+                rpn_threshold = st.slider(
+                    "Set RPN Threshold for Critical Alerts",
+                    min_value=50,
+                    max_value=1000,
+                    value=250,
+                    step=10,
+                    help="Failure modes with RPN at or above this threshold will be flagged as critical"
+                )
+            
+            # Display critical alert banner
+            has_critical = display_critical_alert_banner(fmea_df, rpn_threshold)
+            
+            st.markdown("---")
+            
+            # ===== FEATURE 1: SEVERITY VS OCCURRENCE RISK HEATMAP =====
+            st.markdown("### 🔥 Severity vs Occurrence Risk Heatmap")
+            st.plotly_chart(plot_severity_occurrence_heatmap(fmea_df), use_container_width=True)
+            
+            st.markdown("---")
+            
+            # Existing visualizations
+            st.markdown("### 📈 Additional Visualizations")
+            
             # RPN Distribution
             st.plotly_chart(plot_rpn_distribution(fmea_df), use_container_width=True)
             
@@ -1261,6 +1851,165 @@ def main():
             st.info("Generate an FMEA first to see analytics.")
     
     with tab5:
+        st.markdown('<div class="sub-header">📈 History & Trends</div>', unsafe_allow_html=True)
+        
+        tracker = FMEAHistoryTracker("history")
+        runs = tracker.list_runs()
+        
+        if not runs:
+            st.info("No FMEA runs saved yet. Generate a FMEA to get started!")
+        else:
+            # Create tabs for different views
+            history_view1, history_view2 = st.tabs(["📊 Run Comparison", "📈 Trend Chart"])
+            
+            with history_view1:
+                st.markdown("### Compare Two Runs")
+                
+                col1, col2 = st.columns(2)
+                
+                # Run selection dropdowns
+                run_labels = [f"{run['label']} ({run['timestamp'][:10]})" for run in runs]
+                run_ids = [run['run_id'] for run in runs]
+                
+                with col1:
+                    selected_run1_idx = st.selectbox(
+                        "Select First Run (earlier):",
+                        range(len(runs)),
+                        format_func=lambda i: run_labels[i],
+                        key="run1_select"
+                    )
+                
+                with col2:
+                    # Only allow selecting runs that are after the first run chronologically
+                    default_idx = max(0, selected_run1_idx - 1)
+                    selected_run2_idx = st.selectbox(
+                        "Select Second Run (later):",
+                        range(len(runs)),
+                        index=default_idx,
+                        format_func=lambda i: run_labels[i],
+                        key="run2_select"
+                    )
+                
+                if selected_run1_idx != selected_run2_idx:
+                    run_id_1 = run_ids[selected_run1_idx]
+                    run_id_2 = run_ids[selected_run2_idx]
+                    
+                    # Get comparison
+                    comparison_df = tracker.compare_runs(run_id_1, run_id_2)
+                    
+                    if comparison_df is not None:
+                        st.markdown("---")
+                        
+                        # Display comparison stats
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            improved_count = len(comparison_df[comparison_df['Status'] == 'improved'])
+                            st.metric("✅ Improved", improved_count)
+                        
+                        with col2:
+                            worsened_count = len(comparison_df[comparison_df['Status'] == 'worsened'])
+                            st.metric("⚠️ Worsened", worsened_count)
+                        
+                        with col3:
+                            new_count = len(comparison_df[comparison_df['Status'] == 'new'])
+                            st.metric("🆕 New", new_count)
+                        
+                        with col4:
+                            resolved_count = len(comparison_df[comparison_df['Status'] == 'resolved'])
+                            st.metric("✔️ Resolved", resolved_count)
+                        
+                        st.markdown("---")
+                        
+                        # Display comparison table with color coding
+                        st.markdown("### Detailed Comparison")
+                        
+                        # Create styled dataframe
+                        def style_status(val):
+                            if val == 'improved':
+                                return 'background-color: #90EE90; color: green; font-weight: bold;'
+                            elif val == 'worsened':
+                                return 'background-color: #FFB6C6; color: red; font-weight: bold;'
+                            elif val == 'new':
+                                return 'background-color: #FFE4B5; color: orange; font-weight: bold;'
+                            elif val == 'resolved':
+                                return 'background-color: #87CEEB; color: blue; font-weight: bold;'
+                            else:
+                                return ''
+                        
+                        # Display the comparison table
+                        st.dataframe(
+                            comparison_df,
+                            use_container_width=True,
+                            height=500,
+                            hide_index=True
+                        )
+                    else:
+                        st.error("Could not compare the selected runs.")
+                else:
+                    st.warning("Please select two different runs to compare.")
+            
+            with history_view2:
+                st.markdown("### RPN Trend Chart")
+                
+                trend_data = tracker.get_trend_data(limit=5)
+                
+                if trend_data["run_labels"]:
+                    st.markdown("**Top 5 Failure Modes Over Time**")
+                    
+                    # Prepare data for line chart
+                    trend_df_data = {
+                        "Run": trend_data["run_labels"]
+                    }
+                    
+                    num_runs = len(trend_data["run_labels"])
+                    for mode in trend_data["failure_modes"]:
+                        if mode in trend_data["trend_data"]:
+                            values = trend_data["trend_data"][mode]
+                            # Pad or trim to match run_labels length
+                            if len(values) < num_runs:
+                                values = values + [0] * (num_runs - len(values))
+                            elif len(values) > num_runs:
+                                values = values[:num_runs]
+                            trend_df_data[mode] = values
+                    
+                    trend_df = pd.DataFrame(trend_df_data)
+                    
+                    # Create line chart
+                    fig = px.line(
+                        trend_df,
+                        x="Run",
+                        y=trend_data["failure_modes"],
+                        title="RPN Trend for Top Failure Modes",
+                        labels={"value": "RPN", "variable": "Failure Mode"},
+                        markers=True
+                    )
+                    
+                    fig.update_xaxes(tickangle=-45)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Not enough runs to display trends.")
+            
+            # Display all runs as a table
+            st.markdown("---")
+            st.markdown("### 📋 All Saved Runs")
+            
+            # Convert runs to DataFrame for display
+            runs_df = pd.DataFrame([
+                {
+                    "Run ID": run['run_id'],
+                    "Label": run['label'],
+                    "Timestamp": run['timestamp'],
+                    "Row Count": run['row_count'],
+                    "Avg RPN": f"{run['average_rpn']:.1f}",
+                    "Critical Count": run['critical_count']
+                }
+                for run in runs
+            ])
+            
+            st.dataframe(runs_df, use_container_width=True, hide_index=True)
+    
+    with tab6:
         st.markdown('<div class="sub-header">Help & Documentation</div>', unsafe_allow_html=True)
         
         st.markdown("""
