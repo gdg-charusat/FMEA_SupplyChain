@@ -8,6 +8,7 @@ model:
   top_p: 0.9
   device: "auto"  # auto, cuda, cpu
   quantization: true  # Use 4-bit quantization to save memory
+  inference_timeout: 30  # Maximum seconds for LLM inference (prevents DoS)
 
 # Risk Scoring Parameters
 risk_scoring:
